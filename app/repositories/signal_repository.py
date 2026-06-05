@@ -12,9 +12,10 @@ unit-of-work so multiple repository calls can share one transaction.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable, Sequence
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.signal import Signal
 
@@ -43,6 +44,25 @@ class SignalRepository:
         """Fetch the signal with the given content hash, or ``None`` (dedupe lookup)."""
 
         return self._session.scalar(select(Signal).where(Signal.content_hash == content_hash))
+
+    def list_with_analysis(self, signal_ids: Iterable[uuid.UUID]) -> Sequence[Signal]:
+        """Batch-fetch signals with their Stage 1 analysis (``parsed``) loaded.
+
+        One ``IN`` query with ``Signal.parsed`` eager-loaded -- no N+1 over the
+        signals referenced by a decision's provenance graph (Phase 5). Ordered by
+        ``id`` for determinism. Empty input returns an empty list.
+        """
+
+        ids = list(signal_ids)
+        if not ids:
+            return []
+        stmt = (
+            select(Signal)
+            .where(Signal.id.in_(ids))
+            .options(selectinload(Signal.parsed))
+            .order_by(Signal.id)
+        )
+        return list(self._session.scalars(stmt))
 
     def exists_by_content_hash(self, content_hash: str) -> bool:
         """Whether a signal with the given content hash already exists."""

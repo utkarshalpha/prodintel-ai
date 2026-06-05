@@ -28,6 +28,20 @@ class FeatureRepository:
     def get(self, feature_id: uuid.UUID) -> Feature | None:
         return self._session.get(Feature, feature_id)
 
+    def get_with_signals(self, feature_id: uuid.UUID) -> Feature | None:
+        """Fetch a feature with its provenance edges (``feature_signal``) loaded.
+
+        Used by the Phase 5 explanation traversal to resolve a decision's subject
+        feature and the signals behind it in one query. Returns ``None`` if absent.
+        """
+
+        stmt = (
+            select(Feature)
+            .where(Feature.id == feature_id)
+            .options(selectinload(Feature.feature_signals))
+        )
+        return self._session.scalars(stmt).unique().one_or_none()
+
     def add(self, feature: Feature) -> Feature:
         self._session.add(feature)
         self._session.flush()

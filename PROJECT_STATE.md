@@ -67,6 +67,13 @@ Cross-cutting: Observability (structured logging, correlation ids) app/observabi
 Supporting infrastructure complete: Runtime Harness, Claude Adapter, Structured Logging,
 Alembic migrations, three-phase transaction boundaries.
 
+**Phase 5 — Decision Explainability (`/why`)** ✅ Complete. A read-only provenance projection:
+`GET /decisions/{id}/why` traverses decision → direct evidence signals → subject feature →
+acknowledged conflicts → original stakeholder inputs (raw text + grounded claims). Built from a
+pure, deterministic `ExplanationAssembler` (signal dedup, `reached_via` tagging, `quoted_text`
+from source spans, stable ordering) plus a deterministic integrity check that surfaces — never
+silently drops — any unresolved reference. No new tables, no LLM, no writes.
+
 ---
 
 ## 4. Database Schema
@@ -112,6 +119,7 @@ deleted out from under a decision.
 | `GET` | `/conflicts` | List conflicts (`?subject_id`, `?workspace_id`) | — |
 | `POST` | `/decisions/synthesize` | Run Stage 4 over features (+ their conflicts) | `404` missing feature / `422` synthesis fails |
 | `GET` | `/decisions/{id}` | Retrieve a decision (with evidence + acknowledged conflicts) | `404` |
+| `GET` | `/decisions/{id}/why` | Explainability (Phase 5) — provenance walk decision → signals | `404` missing decision |
 | `GET` | `/decisions` | List decisions (`?subject_id`, `?workspace_id`) | — |
 
 All requests carry a correlation id (`X-Request-ID`, generated if absent). Stage runners
@@ -184,7 +192,7 @@ always yields the same correction message — replayable for research.
 
 ## 9. Current Test Count
 
-**248 tests passing** (1 warning: pre-existing Starlette `TestClient`/httpx deprecation,
+**276 tests passing** (1 warning: pre-existing Starlette `TestClient`/httpx deprecation,
 unrelated to project code). Pure unit + integration; no network, no API key, deterministic.
 Run: `python -m pytest`.
 
@@ -238,15 +246,14 @@ Ordered to reach the product thesis (a defensible, traceable decision) fastest.
 - ✅ **Decision Synthesis (Stage 4)** — ranked, evidence-backed decisions that acknowledge
   every conflict over their subject; the conflict-acknowledgment invariant (ADR-012) makes
   silent omission impossible. Persisted with FK-protected evidence/acknowledgment edges.
+- ✅ **Decision Explainability (Phase 5)** — `GET /decisions/{id}/why`: the provenance walk back to
+  raw signals, with a deterministic integrity check and `quoted_text` per claim. The product's
+  signature feature; the Stage 4 edge tables made it a straightforward relational projection.
 
 **P0 — finish the decision loop**
 1. **Scoring (RICE)** — deterministic compute in code; LLM only estimates inputs with confidence.
    (Stage 4 ranks via a model-provided `priority_rank`; RICE replaces that with a rubric.)
-2. **Evidence Traceability endpoint** — `GET /decisions/{id}/why`: walk the provenance graph
-   (decision → `decision_evidence`/`decision_conflict` → signals/conflicts → claims/spans) back to
-   raw signals; the product's signature feature. The Stage 4 edge tables already make this a
-   straightforward relational walk.
-3. **Confidence service** — compute Evidence Coverage / Reasoning Quality / Input Confidence
+2. **Confidence service** — compute Evidence Coverage / Reasoning Quality / Input Confidence
    (largely deterministic), capped by open conflict severity.
 
 **P1 — credibility & enterprise polish**

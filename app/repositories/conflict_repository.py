@@ -34,6 +34,24 @@ class ConflictRepository:
     def get(self, conflict_id: uuid.UUID) -> Conflict | None:
         return self._session.get(Conflict, conflict_id)
 
+    def get_many_with_parties(self, conflict_ids: Iterable[uuid.UUID]) -> Sequence[Conflict]:
+        """Batch-fetch conflicts (with parties) for the Phase 5 explanation traversal.
+
+        One ``IN`` query with parties eager-loaded -- no N+1. Deterministically ordered
+        by ``(severity desc, id)``. Empty input returns an empty list.
+        """
+
+        ids = list(conflict_ids)
+        if not ids:
+            return []
+        stmt = (
+            select(Conflict)
+            .where(Conflict.id.in_(ids))
+            .options(selectinload(Conflict.parties))
+            .order_by(Conflict.severity.desc(), Conflict.id)
+        )
+        return list(self._session.scalars(stmt).unique())
+
     def list(
         self,
         *,

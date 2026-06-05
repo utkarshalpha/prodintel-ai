@@ -11,10 +11,10 @@ exact stakeholder signals that produced it.
 **Author:** Utkarsh Tiwari  
 **Target roles:** AI Product Manager · Associate Product Manager · Product Strategy · Product Operations  
 **Contact:** [Email](mailto:utkarsh7854@gmail.com) · [LinkedIn](https://www.linkedin.com/in/utkaxh/) · [GitHub](https://github.com/utkarshalpha) <!-- replace # with your profile URLs -->  
-**Status:** Stages 1–4 implemented · 248 tests passing (local, deterministic) · RICE scoring & the traceability endpoint on the roadmap
+**Status:** Stages 1–4 implemented · Decision Explainability (`/why`) shipped · 276 tests passing (local, deterministic) · RICE scoring on the roadmap
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-248%20passing%20(local)-brightgreen)
+![Tests](https://img.shields.io/badge/tests-276%20passing%20(local)-brightgreen)
 ![Pydantic](https://img.shields.io/badge/pydantic-v2-e92063)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-d71f00)
@@ -22,9 +22,10 @@ exact stakeholder signals that produced it.
 ---
 
 > **Status:** Stages 1–4 of the decision pipeline are implemented, production-wired, and
-> covered by **248 passing tests**. RICE scoring and the evidence-traceability endpoint are
-> on the roadmap (see [§15](#15-roadmap)) — they are **not** built yet, and this README does
-> not pretend otherwise.
+> covered by **276 passing tests** — including **Decision Explainability** (`GET
+> /decisions/{id}/why`), which walks a decision's provenance graph back to the original
+> stakeholder signals. RICE scoring is on the roadmap (see [§15](#15-roadmap)) — it is
+> **not** built yet, and this README does not pretend otherwise.
 
 ---
 
@@ -61,7 +62,7 @@ engineering reviewers alike:
   integrity) that make unsupported or hallucinated output *impossible to persist*.
 - **Reproducibility & eval-readiness** — deterministic retries and a faked LLM boundary so the full
   pipeline runs offline in tests; the foundation for a future No-RAG vs. RAG evaluation study.
-- **Engineering discipline** — 248 deterministic tests, Alembic migrations with model-parity checks,
+- **Engineering discipline** — 276 deterministic tests, Alembic migrations with model-parity checks,
   structured JSON logging with correlation IDs, and hardened transaction boundaries.
 - **Documented decision-making** — 12 ADRs, each as *Problem → Decision → Trade-offs → Alternatives*
   (see [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)).
@@ -336,6 +337,7 @@ generated if absent).
 | `GET` | `/conflicts` | List conflicts (`?subject_id`, `?workspace_id`) |
 | `POST` | `/decisions/synthesize` | Run Stage 4 over features (and their conflicts) |
 | `GET` | `/decisions/{id}` | Retrieve a decision (with evidence + acknowledged conflicts) |
+| `GET` | `/decisions/{id}/why` | Explain a decision — walk its provenance graph back to original signals |
 | `GET` | `/decisions` | List decisions (`?subject_id`, `?workspace_id`) |
 
 Stage failures return a structured `422` (status, attempts, error code). Stage runners are read
@@ -370,7 +372,7 @@ workspace-scoping and RAG work — present in the schema, not yet used.
 
 ## 13. Testing
 
-**248 tests passing**, fully deterministic — no network, no API key. The LLM boundary is faked
+**276 tests passing**, fully deterministic — no network, no API key. The LLM boundary is faked
 behind the `ToolCallClient` protocol, so the full pipeline (including retries and validation) runs
 in-process in seconds.
 
@@ -401,14 +403,14 @@ structured logging.
 Implemented today: **Stages 1–4** + runtime harness, Claude adapter, structured logging, Alembic
 migrations, hardened transaction boundaries. **Decision Synthesis (Stage 4) — the keystone — is
 shipped:** ranked, evidence-backed decisions that must acknowledge every conflict over their
-subject (the conflict-acknowledgment invariant, ADR-012).
+subject (the conflict-acknowledgment invariant, ADR-012). **Decision Explainability (Phase 5) is
+shipped:** `GET /decisions/{id}/why` walks the provenance graph (decision → evidence /
+acknowledged-conflict edges → subject feature → conflicts → signals → claims/spans) back to the
+original stakeholder text, with a deterministic integrity check and `quoted_text` for every claim.
 
 **Next (P0 — finish the decision loop):**
 - **Scoring (RICE)** — deterministic math in code; the LLM only estimates inputs. Replaces the
   model-provided `priority_rank` with a rubric.
-- **Evidence Traceability endpoint** — `GET /decisions/{id}/why`: walk the provenance graph
-  (decision → evidence/acknowledged-conflict edges → signals/conflicts → claims/spans) back to raw
-  signals. The Stage 4 edge tables already make this a straightforward relational walk.
 - **Confidence service** — computed Evidence Coverage / Reasoning Quality / Input Confidence.
 
 **P1:** Knowledge/RAG layer (ChromaDB + framework corpus with citations) · Workspace entity &

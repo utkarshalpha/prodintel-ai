@@ -48,6 +48,23 @@ class DecisionRepository:
     def get(self, decision_id: uuid.UUID) -> Decision | None:
         return self._session.get(Decision, decision_id)
 
+    def get_with_provenance(self, decision_id: uuid.UUID) -> Decision | None:
+        """Fetch a decision with its evidence and acknowledged-conflict edges loaded.
+
+        Eager-loads both edge collections so the explanation traversal (Phase 5) needs
+        no per-edge follow-up query. Returns ``None`` if the decision is absent.
+        """
+
+        stmt = (
+            select(Decision)
+            .where(Decision.id == decision_id)
+            .options(
+                selectinload(Decision.evidence),
+                selectinload(Decision.acknowledged_conflicts),
+            )
+        )
+        return self._session.scalars(stmt).unique().one_or_none()
+
     def list(
         self,
         *,

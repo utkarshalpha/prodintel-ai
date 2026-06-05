@@ -22,10 +22,13 @@ from app.api.schemas_decision import (
     DecisionSynthesizeRequest,
     DecisionSynthesizeResponse,
 )
+from app.api.schemas_decision_explanation import DecisionExplanationResponse
 from app.repositories.conflict_repository import ConflictRepository
 from app.repositories.decision_repository import DecisionRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.parsed_signal_repository import ParsedSignalRepository
+from app.repositories.signal_repository import SignalRepository
+from app.services.decision_explanation_service import DecisionExplanationService
 from app.services.decision_service import DecisionService
 from app.stages.stage4.runner import Stage4DecisionRunner
 
@@ -56,6 +59,19 @@ def get_decision_service(
     )
 
 
+def get_decision_explanation_service(
+    session: Session = Depends(get_db),
+) -> DecisionExplanationService:
+    """Read-only explanation service. No Stage 4 runner needed (no LLM, no writes)."""
+
+    return DecisionExplanationService(
+        decision_repo=DecisionRepository(session),
+        feature_repo=FeatureRepository(session),
+        conflict_repo=ConflictRepository(session),
+        signal_repo=SignalRepository(session),
+    )
+
+
 @router.post("/synthesize", response_model=DecisionSynthesizeResponse)
 def synthesize_decisions(
     body: DecisionSynthesizeRequest,
@@ -68,6 +84,16 @@ def synthesize_decisions(
         decisions=[DecisionResponse.from_row(d) for d in result.decisions],
         run=RunMeta.from_result(result.stage_result),
     )
+
+
+@router.get("/{decision_id}/why", response_model=DecisionExplanationResponse)
+def explain_decision(
+    decision_id: uuid.UUID,
+    service: DecisionExplanationService = Depends(get_decision_explanation_service),
+) -> DecisionExplanationResponse:
+    """Explain a decision: traverse its provenance graph back to original signals."""
+
+    return service.explain(decision_id)
 
 
 @router.get("/{decision_id}", response_model=DecisionResponse)
