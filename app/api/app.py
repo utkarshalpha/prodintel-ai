@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.middleware import CorrelationIdMiddleware
 from app.api.routes_conflicts import router as conflicts_router
+from app.api.routes_decisions import router as decisions_router
 from app.api.routes_features import router as features_router
 from app.api.routes_signals import router as signals_router
 from app.observability.logging import get_logger
@@ -21,6 +22,8 @@ from app.services.errors import (
     AnalysisNotFoundError,
     ConflictDetectionFailedError,
     ConflictNotFoundError,
+    DecisionNotFoundError,
+    DecisionSynthesisFailedError,
     FeatureExtractionFailedError,
     FeatureNotFoundError,
     SignalNotFoundError,
@@ -40,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(signals_router)
     app.include_router(features_router)
     app.include_router(conflicts_router)
+    app.include_router(decisions_router)
     _register_exception_handlers(app)
     return app
 
@@ -122,6 +126,30 @@ def _register_exception_handlers(app: FastAPI) -> None:
         }
         _logger.warning(
             "api_detection_failed",
+            extra={
+                "event": "validation_failed",
+                "status": detail["status"],
+                "attempts_used": detail["attempts_used"],
+                "error_code": detail["error_code"],
+            },
+        )
+        return JSONResponse(status_code=422, content={"detail": detail})
+
+    @app.exception_handler(DecisionNotFoundError)
+    async def _decision_not_found(_request: Request, exc: DecisionNotFoundError) -> JSONResponse:
+        return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": str(exc)})
+
+    @app.exception_handler(DecisionSynthesisFailedError)
+    async def _synthesis_failed(_request: Request, exc: DecisionSynthesisFailedError) -> JSONResponse:
+        result = exc.stage_result
+        detail = {
+            "message": str(exc),
+            "status": result.status.value,
+            "attempts_used": result.attempts_used,
+            "error_code": result.error.code.value if result.error else None,
+        }
+        _logger.warning(
+            "api_synthesis_failed",
             extra={
                 "event": "validation_failed",
                 "status": detail["status"],

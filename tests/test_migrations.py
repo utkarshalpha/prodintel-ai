@@ -45,6 +45,9 @@ _ALL_TABLES = (
     "feature_signal",
     "conflict",
     "conflict_party",
+    "decision",
+    "decision_evidence",
+    "decision_conflict",
 )
 
 
@@ -117,6 +120,16 @@ def test_migration_creates_reverse_provenance_index(sqlite_url: str) -> None:
     engine.dispose()
 
 
+def test_migration_creates_decision_reverse_provenance_index(sqlite_url: str) -> None:
+    """The ix_decision_evidence_signal_id index is created by the migrations."""
+
+    command.upgrade(_alembic_config(sqlite_url), "head")
+    engine = create_engine(sqlite_url, future=True)
+    index_names = {idx["name"] for idx in inspect(engine).get_indexes("decision_evidence")}
+    assert "ix_decision_evidence_signal_id" in index_names
+    engine.dispose()
+
+
 def test_downgrade_removes_tables(sqlite_url: str) -> None:
     cfg = _alembic_config(sqlite_url)
     command.upgrade(cfg, "head")
@@ -126,4 +139,5 @@ def test_downgrade_removes_tables(sqlite_url: str) -> None:
     tables = set(inspect(engine).get_table_names())
     assert "signal" not in tables
     assert "parsed_signal" not in tables
+    assert "decision" not in tables
     engine.dispose()

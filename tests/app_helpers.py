@@ -21,12 +21,19 @@ from app.db.base import Base
 from app.stages.stage1 import prompts
 from app.stages.stage2 import prompts as stage2_prompts
 from app.stages.stage3 import prompts as stage3_prompts
+from app.stages.stage4 import prompts as stage4_prompts
 
 _SIGNAL_ID_RE = re.compile(r"signal_id:\s*([0-9a-fA-F-]{36})")
 _RAW_RE = re.compile(r"<<<SIGNAL>>>\n(.*)\n<<<END>>>", re.DOTALL)
 _SOURCE_HINT_RE = re.compile(r"Known source channel \(hint\):\s*(\w+)")
 _FEATURE_ID_RE = re.compile(r"feature_id:\s*([0-9a-fA-F-]{36})")
 _SIGNAL_STAKEHOLDER_RE = re.compile(r"signal_id:\s*([0-9a-fA-F-]{36})\s*\|\s*stakeholder:\s*(\w+)")
+_CONFLICT_SUBJECT_RE = re.compile(
+    r"conflict_id:\s*([0-9a-fA-F-]{36})\s*\|\s*subject_id:\s*([0-9a-fA-F-]{36})"
+)
+
+# A well-formed UUID that is never an input id (used to fabricate provenance failures).
+_NOT_AN_INPUT_ID = "00000000-0000-4000-8000-000000000000"
 
 
 def make_engine():
@@ -254,6 +261,92 @@ class Stage3FakeClient:
     def _respond(self, payload: dict[str, Any]) -> LLMToolResponse:
         return LLMToolResponse(
             tool_name=stage3_prompts.STAGE3_TOOL_NAME,
+            tool_input=payload,
+            stop_reason="tool_use",
+            model_id=self._model_id,
+            input_tokens=self._input_tokens,
+            output_tokens=self._output_tokens,
+        )
+
+
+class Stage4FakeClient:
+    """Deterministic Stage 4 client: synthesizes one decision per subject feature.
+
+    Each decision is about a feature, cites every input signal as evidence, and
+    acknowledges exactly the conflicts whose subject is that feature -- so the default
+    mode passes the decision-integrity gate.
+
+    Modes:
+    * ``recommend``          -- one sound decision per feature (passes).
+    * ``fabricate_evidence`` -- cites a signal id not in the input (unknown_evidence).
+    * ``fabricate_conflict`` -- acknowledges a conflict id not in the input
+                                (unknown_conflict).
+    * ``ignore_conflict``    -- acknowledges no conflicts, so a conflict over the
+                                subject is ignored (unacknowledged_conflict).
+    * ``duplicate_subject``  -- emits two decisions about the first feature
+                                (duplicate_subject).
+    """
+
+    def __init__(
+        self,
+        *,
+        mode: str = "recommend",
+        model_id: str = "claude-test",
+        input_tokens: int = 180,
+        output_tokens: int = 90,
+    ) -> None:
+        self._mode = mode
+        self._model_id = model_id
+        self._input_tokens = input_tokens
+        self._output_tokens = output_tokens
+        self.calls = 0
+
+    def complete(self, *, system: str, messages: Sequence[LLMMessage], tool: ToolSpec) -> LLMToolResponse:
+        self.calls += 1
+        content = messages[0].content
+        feature_ids = _FEATURE_ID_RE.findall(content)
+        signal_ids = [sid for sid, _stakeholder in _SIGNAL_STAKEHOLDER_RE.findall(content)]
+        conflict_pairs = _CONFLICT_SUBJECT_RE.findall(content)  # [(conflict_id, subject_id), ...]
+
+        decisions: list[dict[str, Any]] = []
+        for rank, feature_id in enumerate(feature_ids, start=1):
+            acknowledged = [cid for cid, subject in conflict_pairs if subject == feature_id]
+            evidence = list(signal_ids)
+
+            if self._mode == "fabricate_evidence":
+                evidence = [_NOT_AN_INPUT_ID]
+            elif self._mode == "fabricate_conflict":
+                acknowledged = [_NOT_AN_INPUT_ID]
+            elif self._mode == "ignore_conflict":
+                acknowledged = []
+
+            decisions.append(
+                {
+                    "decision_id": f"d{rank}",
+                    "subject_type": "feature",
+                    "subject_id": feature_id,
+                    "recommendation": "build_now",
+                    "title": f"Build feature {rank}",
+                    "rationale": (
+                        "The stakeholder evidence supports building this feature; any conflicts "
+                        "over it are acknowledged and addressed."
+                    ),
+                    "priority_rank": rank,
+                    "acknowledged_conflict_ids": acknowledged,
+                    "evidence_signal_ids": evidence,
+                    "confidence": {"score": 0.81, "components": {"evidence_coverage": 0.85}},
+                }
+            )
+
+        if self._mode == "duplicate_subject" and feature_ids:
+            twin = dict(decisions[0])
+            twin["decision_id"] = "d_dup"
+            twin["priority_rank"] = len(decisions) + 1
+            decisions.append(twin)
+
+        payload: dict[str, Any] = {"decisions": decisions}
+        return LLMToolResponse(
+            tool_name=stage4_prompts.STAGE4_TOOL_NAME,
             tool_input=payload,
             stop_reason="tool_use",
             model_id=self._model_id,

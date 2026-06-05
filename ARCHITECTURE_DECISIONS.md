@@ -20,6 +20,7 @@ enterprise review, a portfolio walkthrough, an AI-PM interview, and a research w
 | ADR-009 | Structured logging & correlation IDs | Accepted |
 | ADR-010 | Three-phase transaction boundaries | Accepted |
 | ADR-011 | Evidence traceability as a data-model invariant | Accepted |
+| ADR-012 | Decision integrity and conflict-acknowledgment invariant | Accepted |
 
 ---
 
@@ -296,3 +297,71 @@ signals (ADR-006). Every validated stage output can be walked back to the raw si
   deferred to honor the explicit two-table scope for Stage 3, with the trade-off documented.
 - _A graph database for the provenance graph._ Rejected at this scale: a well-indexed relational edge
   model answers every traceability query and is far simpler to operate and defend.
+
+---
+
+## ADR-012 — Decision integrity and conflict-acknowledgment invariant
+
+**Problem.** Stage 4 (Decision Synthesis) is the keystone: it converts features, the signals behind
+them, and the conflicts already detected over them into a recommendation a PM can defend. The failure
+modes are more dangerous than in earlier stages, because the output is the *product*: the model could
+decide about a feature that was never submitted, cite a signal that does not exist, "acknowledge" a
+conflict that is fictional or that belongs to a different feature, decide the same feature twice with
+contradictory recommendations, or — the most insidious failure — **quietly recommend "build now" while
+ignoring a severe conflict that was detected over exactly that feature.** A decision that silently
+omits a known conflict looks confident and clean, yet it is precisely the kind of unaccountable
+recommendation the whole system exists to prevent. "We detected the conflict but the decision never
+mentioned it" is disqualifying for a decision-support tool.
+
+**Decision.** Make decision soundness a **deterministic gate** (`validate_decision_integrity`, adapted
+by `DecisionIntegrityValidator`), in the same gate-plus-adapter shape as grounding (ADR-004), provenance
+(ADR-005), and conflict integrity (ADR-006). Relative to the input feature, signal, and conflict sets, a
+synthesis output is sound only when **every** decision satisfies all of:
+
+1. `subject_id` is a real input feature (no fabricated subject);
+2. no two decisions share a subject (one decision per feature — no contradictory twins);
+3. every evidence id is a real input signal (no unsupported evidence);
+4. every acknowledged conflict id is a real input conflict **whose subject is this decision's subject**
+   (no fabricated or mis-attributed conflicts); and
+5. **every input conflict over the decision's subject is acknowledged** — completeness, not just
+   correctness, of conflict accounting.
+
+Rule 5 is the load-bearing invariant. The set of conflicts a decision *must* acknowledge is computed
+deterministically from the persisted conflicts whose `subject_id` equals the decision's subject; any
+member of that set missing from `acknowledged_conflict_ids` fails the stage and triggers a retry with a
+precise, replayable hint. **Silent omission is therefore impossible by construction:** the system
+cannot persist a decision that ignores a conflict it already knows about. Acknowledgment is enforced as
+a relational fact, too — `decision_conflict` is a real edge table (FK → `conflict` `RESTRICT`), so the
+acknowledged conflicts are queryable provenance, not prose buried in a rationale, and an acknowledged
+conflict cannot be deleted out from under the decision (extending ADR-011 to Stage 4, alongside the
+`decision_evidence` edge with FK → `signal` `RESTRICT`).
+
+**Trade-offs.**
+- (+) The strongest guarantee in the product: a persisted decision provably accounts for *all* known
+  conflicts over its subject and cites only real evidence. "Show me why" is answerable from the schema.
+- (+) Completeness is computed, not trusted — the model cannot earn a pass by acknowledging *some*
+  conflicts; it must account for every one or be rejected with a deterministic, replayable correction.
+- (+) Reuses the established gate-and-adapter pattern and the harness retry loop verbatim; no new
+  control flow, fully unit-testable with no network.
+- (−) "Acknowledged" is enforced *structurally* (the conflict id is referenced) rather than
+  *semantically* (the rationale genuinely engages with it). A decision could list a conflict id and
+  address it only superficially in prose. Acceptable: structural acknowledgment is deterministic and
+  forces the conflict into the decision's provenance; prose quality is a softer concern for a later
+  review/eval pass, not a gate.
+- (−) The invariant assumes conflicts are detected (Stage 3) before synthesis (Stage 4); a feature
+  whose conflicts were never detected has an empty "must-acknowledge" set and so is trivially compliant.
+  This is correct given the pipeline ordering and is documented, not hidden.
+
+**Alternatives considered.**
+- _Let the model decide which conflicts are "relevant."_ Rejected: this is exactly the discretion that
+  enables silent omission — the model would rationalize away inconvenient conflicts. Relevance over a
+  feature's own conflicts is not a judgment call; all of them must be on the record.
+- _Treat unacknowledged conflicts as a warning, not a hard error._ Rejected: a warning does not block
+  persistence, so an ignored conflict would still reach the database and the API — defeating the
+  invariant. Conflict accounting is a correctness property, not advisory.
+- _Store acknowledgments as a JSON array on `decision` (the Stage 3 evidence trade-off)._ Rejected for
+  Stage 4: decisions are the product's signature artifact and the basis of the future `/why` walk, so
+  acknowledgments earn a real FK edge table with deletion protection rather than unprotected JSON.
+- _Require a decision per input feature (full coverage of features, not just conflicts)._ Deferred:
+  forcing a decision for every feature is a heavier product rule (some features may legitimately defer);
+  the invariant that bites is *conflict* coverage, so that is what the gate enforces now.

@@ -22,8 +22,8 @@ Detection → Prioritization → Decision Recommendation → Evidence Traceabili
 stakeholder signals, the supporting evidence, the frameworks applied, and a confidence
 score. Traceability is a data-model invariant, not a feature.
 
-The first three stages of the core loop (signals → analysis → features → conflicts) are
-implemented and production-wired.
+The first four stages of the core loop (signals → analysis → features → conflicts →
+decisions) are implemented and production-wired.
 
 ---
 
@@ -62,6 +62,7 @@ Cross-cutting: Observability (structured logging, correlation ids) app/observabi
 | **Stage 1** | Signal Analysis — parse one signal into intent, stakeholder type, urgency, sentiment, source-anchored claims | **Grounding** (claim spans must substantiate the claim) | ✅ Complete |
 | **Stage 2** | Feature Extraction — cluster grounded signals into normalized features with JTBD | **Provenance** (every feature cites real signals; inputs fully partitioned) | ✅ Complete |
 | **Stage 3** | Conflict Detection — surface stakeholder disagreements (priority / risk / resource / strategic) over features | **Conflict integrity** (evidence-traceable + genuine opposition) | ✅ Complete |
+| **Stage 4** | Decision Synthesis — convert features + conflicts + evidence into ranked, evidence-backed decisions (recommendation + rationale) | **Decision integrity** (real subject/evidence/conflicts; every conflict over the subject acknowledged) | ✅ Complete |
 
 Supporting infrastructure complete: Runtime Harness, Claude Adapter, Structured Logging,
 Alembic migrations, three-phase transaction boundaries.
@@ -70,7 +71,7 @@ Alembic migrations, three-phase transaction boundaries.
 
 ## 4. Database Schema
 
-Six tables. UUID primary keys (`sa.Uuid`, native on Postgres, `CHAR(32)` on SQLite).
+Nine tables. UUID primary keys (`sa.Uuid`, native on Postgres, `CHAR(32)` on SQLite).
 Enums store lowercase values via `values_callable`. JSON columns hold structured AI
 output. Vectors live in ChromaDB (`chroma_id` reserved, nullable).
 
@@ -82,8 +83,16 @@ output. Vectors live in ChromaDB (`chroma_id` reserved, nullable).
 | `feature_signal` | Provenance edge feature↔signal | `relationship`, `created_at` | composite PK `(feature_id, signal_id)`; FK→feature `CASCADE`, FK→signal **`RESTRICT`**; `ix_feature_signal_signal_id` |
 | `conflict` | Detected disagreement over a subject | `subject_type`, `subject_id` (polymorphic), `conflict_type`, `severity`, `status`, `confidence` (JSON), `model_meta` (JSON) | PK; `ix_conflict_subject_id` |
 | `conflict_party` | One stakeholder position in a conflict | `stakeholder_type`, `stance`, `summary`, `evidence_signal_ids` (JSON) | FK→conflict `CASCADE`; `ix_conflict_party_conflict_id` |
+| `decision` | Synthesized, evidence-backed decision over a subject | `subject_type`, `subject_id` (polymorphic), `recommendation`, `title`, `rationale`, `priority_rank`, `status`, `confidence` (JSON), `model_meta` (JSON) | PK; `ix_decision_subject_id` |
+| `decision_evidence` | Provenance edge decision↔signal | `created_at` | composite PK `(decision_id, signal_id)`; FK→decision `CASCADE`, FK→signal **`RESTRICT`**; `ix_decision_evidence_signal_id` |
+| `decision_conflict` | Edge decision↔acknowledged conflict | `created_at` | composite PK `(decision_id, conflict_id)`; FK→decision `CASCADE`, FK→conflict **`RESTRICT`**; `ix_decision_conflict_conflict_id` |
 
 **Reserved (not yet populated):** `workspace_id` (all tables), `chroma_id` (`signal`).
+
+Stage 4 strengthens evidence traceability relative to Stage 3: a decision's evidence and
+its acknowledged conflicts are real **edge tables with FK `RESTRICT`** (deletion
+protection), not JSON — so neither a backing signal nor an acknowledged conflict can be
+deleted out from under a decision.
 
 ---
 
@@ -101,9 +110,12 @@ output. Vectors live in ChromaDB (`chroma_id` reserved, nullable).
 | `POST` | `/conflicts/detect` | Run Stage 3 over features | `404` missing feature / `422` detection fails |
 | `GET` | `/conflicts/{id}` | Retrieve a conflict (with positions + evidence) | `404` |
 | `GET` | `/conflicts` | List conflicts (`?subject_id`, `?workspace_id`) | — |
+| `POST` | `/decisions/synthesize` | Run Stage 4 over features (+ their conflicts) | `404` missing feature / `422` synthesis fails |
+| `GET` | `/decisions/{id}` | Retrieve a decision (with evidence + acknowledged conflicts) | `404` |
+| `GET` | `/decisions` | List decisions (`?subject_id`, `?workspace_id`) | — |
 
 All requests carry a correlation id (`X-Request-ID`, generated if absent). Stage runners
-are read from `app.state.stage{1,2,3}_runner` (configured at startup; `503` if absent).
+are read from `app.state.stage{1,2,3,4}_runner` (configured at startup; `503` if absent).
 Entry point: `uvicorn app.main:app`.
 
 ---
@@ -128,7 +140,7 @@ build prompt → call model (forced tool use)
 - **`StageResult[T]` / `StageMetrics` / `AttemptMetrics`** — typed outcome with per-attempt
   tokens, stop reasons, validation flags, and confidence.
 - **`HarnessManagedMetadataRunner`** (mixin) — strips `model_meta`/`schema_version` from the
-  tool the model sees and injects accurate values from the real response (used by Stage 3;
+  tool the model sees and injects accurate values from the real response (used by Stages 3–4;
   Stages 1–2 inline the same behavior — see Tech Debt).
 
 ---
@@ -144,6 +156,7 @@ structured report plus a thin adapter implementing the `StageValidator` protocol
 | 1 | `grounding.py` | Each claim's char span substantiates it (token-overlap ≥ threshold); ≥1 grounded claim |
 | 2 | `provenance.py` | Every feature cites real input signals; inputs fully partitioned (no fabricated/duplicated/dropped signal) |
 | 3 | `conflict_integrity.py` | Subject is a real feature; evidence ⊆ input signals; positions match stakeholders; **genuine opposition** required; empty result allowed |
+| 4 | `decision_integrity.py` | Subject is a real feature; evidence ⊆ input signals; acknowledged conflicts are real and about the subject; **every conflict over the subject acknowledged**; no duplicate subjects |
 
 A failed gate produces deterministic retry feedback (field + hint), so the same failure
 always yields the same correction message — replayable for research.
@@ -171,7 +184,7 @@ always yields the same correction message — replayable for research.
 
 ## 9. Current Test Count
 
-**211 tests passing** (1 warning: pre-existing Starlette `TestClient`/httpx deprecation,
+**248 tests passing** (1 warning: pre-existing Starlette `TestClient`/httpx deprecation,
 unrelated to project code). Pure unit + integration; no network, no API key, deterministic.
 Run: `python -m pytest`.
 
@@ -179,7 +192,7 @@ Run: `python -m pytest`.
 
 ## 10. Current Alembic Revision
 
-**Head: `0004_conflict_conflict_party`.**
+**Head: `0005_decision_and_edges`.**
 
 | Revision | Adds |
 |---|---|
@@ -187,9 +200,10 @@ Run: `python -m pytest`.
 | `0002_feature_feature_signal` | `feature`, `feature_signal` |
 | `0003_feature_signal_signal_id_index` | `ix_feature_signal_signal_id` |
 | `0004_conflict_conflict_party` | `conflict`, `conflict_party` (+ indexes) |
+| `0005_decision_and_edges` | `decision`, `decision_evidence`, `decision_conflict` (+ indexes) |
 
 Migration↔model parity is enforced by a test comparing columns, types, nullability, PK,
-unique constraints, FKs (with `ondelete`), and indexes across all six tables. Apply with
+unique constraints, FKs (with `ondelete`), and indexes across all nine tables. Apply with
 `alembic upgrade head` (Postgres via `DATABASE_URL`; needs a driver, e.g. `psycopg[binary]`).
 
 ---
@@ -198,12 +212,13 @@ unique constraints, FKs (with `ondelete`), and indexes across all six tables. Ap
 
 | Item | Severity | Notes |
 |---|---|---|
-| Harness-metadata override duplicated in Stage 1 & 2 runners | Low | `HarnessManagedMetadataRunner` mixin exists and is used by Stage 3; Stages 1–2 not yet retrofitted (frozen + passing) |
-| Conflict evidence stored as JSON (no FK) | Low/Med | `conflict_party.evidence_signal_ids` is JSON, not an FK edge table like `feature_signal`; validated at write time but no DB-level `RESTRICT`. Trade-off taken to honor the two-table design |
-| `conflict.subject_id` is polymorphic (no FK) | Low | Indexed; validity enforced by the integrity gate, not the DB |
+| Harness-metadata override duplicated in Stage 1 & 2 runners | Low | `HarnessManagedMetadataRunner` mixin exists and is used by Stages 3 & 4; Stages 1–2 not yet retrofitted (frozen + passing) |
+| Conflict evidence stored as JSON (no FK) | Low/Med | `conflict_party.evidence_signal_ids` is JSON, not an FK edge table; validated at write time but no DB-level `RESTRICT`. Trade-off to honor the two-table design (Stage 4 evidence/acknowledgment *do* use FK edge tables — see ADR-012) |
+| `conflict.subject_id` / `decision.subject_id` polymorphic (no FK) | Low | Indexed; validity enforced by the integrity gate, not the DB |
 | No workspace scoping | Med | `workspace_id` reserved/nullable everywhere; no `Workspace` entity, so stages take explicit id lists rather than "everything in workspace X" |
-| Extract/detect not idempotent | Med | Re-running `extract_features` / `detect_conflicts` creates duplicate rows (no upsert); semantics need a decision |
-| Severity is model-provided | Low | Not deterministically recomputed from a rubric (the earlier architecture envisioned recomputation); schema-bounded 1–5 |
+| Extract/detect/synthesize not idempotent | Med | Re-running `extract_features` / `detect_conflicts` / `synthesize_decisions` creates duplicate rows (no upsert); semantics need a decision |
+| Severity / recommendation / priority_rank are model-provided | Low | Not deterministically recomputed from a rubric (the envisioned RICE recomputation is a separate roadmap item); schema-bounded |
+| Conflict acknowledgment is structural, not semantic | Low | Stage 4 enforces that a conflict id is *referenced* (deterministic), not that the rationale genuinely engages it; a softer review/eval concern (ADR-012) |
 | Non-deterministic child ordering | Low | `feature_signals` / `conflict.parties` have no `ORDER BY`; response ordering varies — minor reproducibility concern |
 | Signal immutability is ORM-only | Low | Enforced by a `before_update` event, not a DB trigger (migration intentionally does not add one) |
 | Vector/RAG layer absent | Med | `chroma_id` reserved; no embeddings, no framework knowledge base yet |
@@ -219,11 +234,20 @@ index, LLM-call-inside-transaction, and absence of structured logging.
 
 Ordered to reach the product thesis (a defensible, traceable decision) fastest.
 
-**P0 — completes the decision loop**
+**Done — the keystone of the decision loop**
+- ✅ **Decision Synthesis (Stage 4)** — ranked, evidence-backed decisions that acknowledge
+  every conflict over their subject; the conflict-acknowledgment invariant (ADR-012) makes
+  silent omission impossible. Persisted with FK-protected evidence/acknowledgment edges.
+
+**P0 — finish the decision loop**
 1. **Scoring (RICE)** — deterministic compute in code; LLM only estimates inputs with confidence.
-2. **Decision Synthesis** — rank features, acknowledge conflicts, ground in frameworks; the keystone stage.
-3. **Evidence Traceability endpoint** — `GET /decisions/{id}/why`: walk the provenance graph back to raw signals (recursive query); the product's signature feature.
-4. **Confidence service** — compute Evidence Coverage / Reasoning Quality / Input Confidence (largely deterministic), capped by open conflict severity.
+   (Stage 4 ranks via a model-provided `priority_rank`; RICE replaces that with a rubric.)
+2. **Evidence Traceability endpoint** — `GET /decisions/{id}/why`: walk the provenance graph
+   (decision → `decision_evidence`/`decision_conflict` → signals/conflicts → claims/spans) back to
+   raw signals; the product's signature feature. The Stage 4 edge tables already make this a
+   straightforward relational walk.
+3. **Confidence service** — compute Evidence Coverage / Reasoning Quality / Input Confidence
+   (largely deterministic), capped by open conflict severity.
 
 **P1 — credibility & enterprise polish**
 5. **Knowledge / RAG layer** — ChromaDB + curated framework corpus (RICE/JTBD/MoSCoW/strategy/PRD), citations on decisions.

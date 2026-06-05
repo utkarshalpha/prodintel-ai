@@ -37,6 +37,7 @@ __all__ = [
     "SubjectType",
     "Stance",
     "FrameworkName",
+    "DecisionRecommendation",
     "DecisionStatus",
     "EvidenceType",
     "Relationship",
@@ -132,6 +133,20 @@ class FrameworkName(str, Enum):
     MOSCOW = "MoSCoW"
     STRATEGY = "STRATEGY"
     PRD_TEMPLATE = "PRD_TEMPLATE"
+
+
+class DecisionRecommendation(str, Enum):
+    """The action a synthesized decision recommends for its subject feature.
+
+    This is the *content* of the decision (what to do), distinct from
+    :class:`DecisionStatus`, which is its lifecycle state (proposed/accepted/...).
+    Emitted by the Stage 4 model and schema-bounded to this closed set.
+    """
+
+    BUILD_NOW = "build_now"
+    BUILD_LATER = "build_later"
+    REJECT = "reject"
+    NEEDS_DISCUSSION = "needs_discussion"
 
 
 class DecisionStatus(str, Enum):

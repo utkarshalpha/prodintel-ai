@@ -10,21 +10,21 @@ exact stakeholder signals that produced it.
 
 **Author:** Utkarsh Tiwari  
 **Target roles:** AI Product Manager · Associate Product Manager · Product Strategy · Product Operations  
-**Contact:** [Email](mailto:chaitanya@convrse.ai) · [LinkedIn](#) · [GitHub](#) <!-- replace # with your profile URLs -->  
-**Status:** Stages 1–3 implemented · 211 tests passing (local, deterministic) · scoring & decision synthesis on the roadmap
+**Contact:** [Email](mailto:utkarsh7854@gmail.com) · [LinkedIn](https://www.linkedin.com/in/utkaxh/) · [GitHub](https://github.com/utkarshalpha) <!-- replace # with your profile URLs -->  
+**Status:** Stages 1–4 implemented · 248 tests passing (local, deterministic) · RICE scoring & the traceability endpoint on the roadmap
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-211%20passing%20(local)-brightgreen)
+![Tests](https://img.shields.io/badge/tests-248%20passing%20(local)-brightgreen)
 ![Pydantic](https://img.shields.io/badge/pydantic-v2-e92063)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-d71f00)
 
 ---
 
-> **Status:** Stages 1–3 of the decision pipeline are implemented, production-wired, and
-> covered by **211 passing tests**. Scoring and decision synthesis are on the roadmap
-> (see [§14](#14-roadmap)) — they are **not** built yet, and this README does not pretend
-> otherwise.
+> **Status:** Stages 1–4 of the decision pipeline are implemented, production-wired, and
+> covered by **248 passing tests**. RICE scoring and the evidence-traceability endpoint are
+> on the roadmap (see [§15](#15-roadmap)) — they are **not** built yet, and this README does
+> not pretend otherwise.
 
 ---
 
@@ -39,6 +39,8 @@ cannot prove. Today the pipeline covers:
 1. **Signal Analysis** — parse one signal into structured, *source-anchored* claims.
 2. **Feature Extraction** — cluster grounded signals into normalized product features.
 3. **Conflict Detection** — surface genuine disagreements between stakeholders.
+4. **Decision Synthesis** — turn features, conflicts, and evidence into ranked,
+   evidence-backed decisions that acknowledge every conflict over their subject.
 
 The defining property is **traceability**: it is a data-model and validation invariant, not
 a feature bolted on at the end.
@@ -59,15 +61,15 @@ engineering reviewers alike:
   integrity) that make unsupported or hallucinated output *impossible to persist*.
 - **Reproducibility & eval-readiness** — deterministic retries and a faked LLM boundary so the full
   pipeline runs offline in tests; the foundation for a future No-RAG vs. RAG evaluation study.
-- **Engineering discipline** — 211 deterministic tests, Alembic migrations with model-parity checks,
+- **Engineering discipline** — 248 deterministic tests, Alembic migrations with model-parity checks,
   structured JSON logging with correlation IDs, and hardened transaction boundaries.
-- **Documented decision-making** — 11 ADRs, each as *Problem → Decision → Trade-offs → Alternatives*
+- **Documented decision-making** — 12 ADRs, each as *Problem → Decision → Trade-offs → Alternatives*
   (see [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)).
 
 ## Example End-to-End Flow
 
 A walkthrough of the implemented pipeline. _Responses are illustrative and abbreviated; ids are
-truncated. Requires the API running (see [§15](#15-running-locally)); the LLM boundary is faked in
+truncated. Requires the API running (see [§16](#16-running-locally)); the LLM boundary is faked in
 tests and real in production._
 
 ```bash
@@ -126,10 +128,28 @@ curl -X POST localhost:8000/conflicts/detect -d '{ "feature_ids": ["c47…"] }'
 #   } ], "run": { … } }
 ```
 
-**Follow the chain:** the conflict's `evidence_signal_ids` point back to signals; the feature's
-`source_signal_ids` point back to the same signals; each claim points to a character span in the
-original `raw_text`. Nothing in the pipeline exists without provenance — and any output the
-validators cannot substantiate is rejected, not persisted.
+```bash
+# 5) Synthesize decisions (Stage 4) — a ranked, evidence-backed recommendation that
+#    MUST acknowledge every conflict detected over its subject feature
+curl -X POST localhost:8000/decisions/synthesize -d '{ "feature_ids": ["c47…"] }'
+# → 200
+# { "decisions": [ {
+#     "id": "e90…", "subject_id": "c47…",
+#     "recommendation": "build_now", "priority_rank": 1, "status": "proposed",
+#     "title": "Build enterprise SSO",
+#     "rationale": "Sales evidence supports it; the engineering risk conflict is acknowledged.",
+#     "acknowledged_conflict_ids": ["d12…"],
+#     "evidence_signal_ids": ["8f3…", "b21…"],
+#     "confidence": { "score": 0.81, "basis": "strong" }
+#   } ], "run": { … } }
+```
+
+**Follow the chain:** the decision's `evidence_signal_ids` point back to signals and its
+`acknowledged_conflict_ids` back to the conflicts over its subject; each conflict's
+`evidence_signal_ids` point back to signals; the feature's `source_signal_ids` point back to the
+same signals; each claim points to a character span in the original `raw_text`. Nothing in the
+pipeline exists without provenance — and any output the validators cannot substantiate (including a
+decision that ignores a known conflict over its subject) is rejected, not persisted.
 
 ## 2. Why this project exists
 
@@ -156,8 +176,9 @@ Prioritization → Decision Recommendation → Evidence Traceability.`
 **The thesis:** every recommendation must be traceable back to (a) the original stakeholder
 signals, (b) the supporting evidence, (c) the frameworks applied, and (d) a confidence score.
 
-The first three stages of this loop are implemented today. Prioritization and decision
-synthesis — the keystone — are the next milestones.
+The first four stages of this loop are implemented today, through decision synthesis — the
+keystone. RICE prioritization (deterministic scoring) and the evidence-traceability endpoint
+are the next milestones.
 
 ## 4. Architecture diagram
 
@@ -171,17 +192,17 @@ and unit-tested.
                                  │
 ┌───────────────────────────────▼──────────────────────────────────────────┐
 │  Services   — use cases, transaction boundaries (Read → AI → Write)        │
-│  SignalService · FeatureService · ConflictService                          │
+│  SignalService · FeatureService · ConflictService · DecisionService        │
 └───────────────┬───────────────────────────────────┬──────────────────────┘
                 │                                     │
    ┌────────────▼───────────┐            ┌────────────▼─────────────────────┐
    │  Repositories          │            │  AI Stages (one runner / stage)   │
-   │  (SQLAlchemy, flush)   │            │  Stage1 · Stage2 · Stage3         │
+   │  (SQLAlchemy, flush)   │            │  Stage1 · Stage2 · Stage3 · Stage4│
    └────────────┬───────────┘            └────────────┬─────────────────────┘
                 │                                     │
    ┌────────────▼───────────┐            ┌────────────▼─────────────────────┐
    │  Postgres + Alembic    │            │  Runtime Harness                  │
-   │  6 tables, provenance  │            │  BaseStageRunner · RetryPolicy ·  │
+   │  9 tables, provenance  │            │  BaseStageRunner · RetryPolicy ·  │
    │  edges, indexes        │            │  StageResult · metrics            │
    └────────────────────────┘            └───────┬───────────────┬──────────┘
                                                  │               │
@@ -190,6 +211,7 @@ and unit-tested.
                                   │ (Pydantic, strict)│  │ grounding ·       │
                                   └──────────────┬────┘  │ provenance ·      │
                                                  │       │ conflict integrity│
+                                                 │       │ decision integrity│
                                   ┌──────────────▼────┐  └───────────────────┘
                                   │ Claude Adapter    │
                                   │ (ToolCallClient)  │  ← only LLM boundary
@@ -239,7 +261,30 @@ model from manufacturing drama to seem useful.
 > _Example:_ Sales says *"Enterprise SSO is critical"*, Engineering flags *"SSO is high risk"* →
 > a `risk` conflict with advocate vs. risk-flag positions, each traceable to its signal.
 
-## 8. Trust & Validation Architecture
+## 8. Stage 4: Decision Synthesis
+
+**Input:** features, the stakeholder signals behind them, and the conflicts already detected
+over them. **Output:** the keystone artifact — a set of ranked, **evidence-backed decisions**,
+each with a recommendation (`build_now` / `build_later` / `reject` / `needs_discussion`), a
+rationale, a priority rank, the signals it rests on, and the conflicts it accounts for.
+
+**Trust gate — Decision integrity.** A decision must be about a real input feature, cite only
+real input signals as evidence, and acknowledge only real conflicts that are about *its own*
+subject. Most importantly, it must acknowledge **every** conflict detected over that subject —
+a decision **cannot silently ignore a known conflict** about the feature it decides. No two
+decisions may decide the same feature. Any violation fails the stage and triggers a retry, so a
+persisted decision provably accounts for everything known to oppose it (see ADR-012).
+
+Traceability is enforced relationally, not in prose: a decision's evidence and its acknowledged
+conflicts are real edge tables (`decision_evidence`, `decision_conflict`) with foreign keys that
+**prevent deleting a signal or conflict a decision depends on** — the same deletion protection
+`feature_signal` gives features.
+
+> _Example:_ a "build now" decision on **Enterprise SSO** that cites the Sales signal but never
+> acknowledges the Engineering risk conflict detected over that very feature is rejected
+> deterministically — a decision may not look past a conflict it already knows about.
+
+## 9. Trust & Validation Architecture
 
 Two tiers per stage, both deterministic:
 
@@ -247,16 +292,17 @@ Two tiers per stage, both deterministic:
   that invents a field fails loudly instead of corrupting state. The tool schema the model sees
   and the validator the system runs are generated from the *same* contract.
 - **Semantic validation** (stage-specific gate) — pure, dependency-free functions:
-  `grounding` (Stage 1), `provenance` (Stage 2), `conflict_integrity` (Stage 3).
+  `grounding` (Stage 1), `provenance` (Stage 2), `conflict_integrity` (Stage 3),
+  `decision_integrity` (Stage 4).
 
 When a gate fails, it produces **deterministic retry feedback** (the exact violated constraint +
 a hint), so the same failure always yields the same correction — replayable for research. The
 harness is the *only* retry authority (capped exponential backoff, no jitter; the SDK's internal
 retries are disabled).
 
-See [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for the full rationale (11 ADRs).
+See [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for the full rationale (12 ADRs).
 
-## 9. Tech Stack
+## 10. Tech Stack
 
 | Concern | Choice |
 |---|---|
@@ -271,7 +317,7 @@ See [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for the full rational
 | Testing | pytest |
 | Observability | stdlib `logging` with a JSON formatter + correlation IDs |
 
-## 10. API Overview
+## 11. API Overview
 
 Entry point: `uvicorn app.main:app`. Every request carries a correlation id (`X-Request-ID`,
 generated if absent).
@@ -288,13 +334,16 @@ generated if absent).
 | `POST` | `/conflicts/detect` | Run Stage 3 over features |
 | `GET` | `/conflicts/{id}` | Retrieve a conflict (with positions + evidence) |
 | `GET` | `/conflicts` | List conflicts (`?subject_id`, `?workspace_id`) |
+| `POST` | `/decisions/synthesize` | Run Stage 4 over features (and their conflicts) |
+| `GET` | `/decisions/{id}` | Retrieve a decision (with evidence + acknowledged conflicts) |
+| `GET` | `/decisions` | List decisions (`?subject_id`, `?workspace_id`) |
 
 Stage failures return a structured `422` (status, attempts, error code). Stage runners are read
 from app state and return `503` if not configured.
 
-## 11. Database Schema
+## 12. Database Schema
 
-Six tables. UUID primary keys; enums stored as lowercase values; JSON columns for structured AI
+Nine tables. UUID primary keys; enums stored as lowercase values; JSON columns for structured AI
 output; vectors designated for ChromaDB (`chroma_id` reserved, not yet populated).
 
 | Table | Purpose | Key integrity |
@@ -305,16 +354,23 @@ output; vectors designated for ChromaDB (`chroma_id` reserved, not yet populated
 | `feature_signal` | Provenance edge feature↔signal | composite PK; FK→signal **`RESTRICT`**; reverse-lookup index |
 | `conflict` | Detected disagreement over a subject | polymorphic `subject_id` (indexed) |
 | `conflict_party` | One stakeholder position + evidence | FK→conflict `CASCADE` |
+| `decision` | Synthesized, evidence-backed decision over a subject | polymorphic `subject_id` (indexed); `recommendation` / `priority_rank` / `status` |
+| `decision_evidence` | Provenance edge decision↔signal | composite PK; FK→signal **`RESTRICT`**; reverse-lookup index |
+| `decision_conflict` | Edge decision↔acknowledged conflict | composite PK; FK→conflict **`RESTRICT`**; reverse-lookup index |
 
-Current Alembic head: **`0004_conflict_conflict_party`**. Migration↔model parity (columns, types,
+Stage 4 makes a decision's evidence and its acknowledged conflicts **FK-protected edge tables**
+(deletion protection), not JSON — so neither a backing signal nor an acknowledged conflict can be
+deleted out from under a decision.
+
+Current Alembic head: **`0005_decision_and_edges`**. Migration↔model parity (columns, types,
 constraints, foreign keys, indexes) is enforced by a test.
 
 `workspace_id` (all tables) and `chroma_id` (`signal`) are **reserved/nullable** for upcoming
 workspace-scoping and RAG work — present in the schema, not yet used.
 
-## 12. Testing
+## 13. Testing
 
-**211 tests passing**, fully deterministic — no network, no API key. The LLM boundary is faked
+**248 tests passing**, fully deterministic — no network, no API key. The LLM boundary is faked
 behind the `ToolCallClient` protocol, so the full pipeline (including retries and validation) runs
 in-process in seconds.
 
@@ -323,31 +379,36 @@ python -m pytest          # full suite
 python -m pytest -v       # verbose
 ```
 
-Coverage spans contracts, each deterministic gate (with adversarial cases), the runtime harness,
-the Claude adapter (retryable vs. fatal error mapping), services (Stage 1→2→3 end-to-end), the
-HTTP API, migrations (apply/rollback + parity), provenance integrity (deletion protection +
-reverse traversal), and structured logging.
+Coverage spans contracts, each deterministic gate (grounding, provenance, conflict integrity,
+decision integrity — with adversarial cases), the runtime harness, the Claude adapter (retryable
+vs. fatal error mapping), services (Stage 1→2→3→4 end-to-end), the HTTP API, migrations
+(apply/rollback + parity), provenance integrity (deletion protection + reverse traversal), and
+structured logging.
 
-## 13. Documentation
+## 14. Documentation
 
 - **[PROJECT_STATE.md](PROJECT_STATE.md)** — living snapshot: architecture, completed stages,
   schema, endpoints, runtime/validation/observability, test count, Alembic head, open tech debt,
   and roadmap.
-- **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** — 11 ADRs, each as
+- **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** — 12 ADRs, each as
   *Problem → Decision → Trade-offs → Alternatives considered* (contract-first, harness-managed
-  metadata, deterministic retries, the three validation gates, repository & service patterns,
-  structured logging, transaction boundaries, evidence traceability).
+  metadata, deterministic retries, the four validation gates, repository & service patterns,
+  structured logging, transaction boundaries, evidence traceability, the decision-integrity and
+  conflict-acknowledgment invariant).
 
-## 14. Roadmap
+## 15. Roadmap
 
-Implemented today: **Stages 1–3** + runtime harness, Claude adapter, structured logging, Alembic
-migrations, hardened transaction boundaries.
+Implemented today: **Stages 1–4** + runtime harness, Claude adapter, structured logging, Alembic
+migrations, hardened transaction boundaries. **Decision Synthesis (Stage 4) — the keystone — is
+shipped:** ranked, evidence-backed decisions that must acknowledge every conflict over their
+subject (the conflict-acknowledgment invariant, ADR-012).
 
-**Next (P0 — completes the decision loop):**
-- **Scoring (RICE)** — deterministic math in code; the LLM only estimates inputs.
-- **Decision Synthesis** — rank features, acknowledge conflicts, ground in frameworks (the keystone).
-- **Evidence Traceability endpoint** — `GET /decisions/{id}/why`: walk the provenance graph back to
-  raw signals.
+**Next (P0 — finish the decision loop):**
+- **Scoring (RICE)** — deterministic math in code; the LLM only estimates inputs. Replaces the
+  model-provided `priority_rank` with a rubric.
+- **Evidence Traceability endpoint** — `GET /decisions/{id}/why`: walk the provenance graph
+  (decision → evidence/acknowledged-conflict edges → signals/conflicts → claims/spans) back to raw
+  signals. The Stage 4 edge tables already make this a straightforward relational walk.
 - **Confidence service** — computed Evidence Coverage / Reasoning Quality / Input Confidence.
 
 **P1:** Knowledge/RAG layer (ChromaDB + framework corpus with citations) · Workspace entity &
@@ -355,9 +416,10 @@ scoping · Decision history / audit log · Eval harness (No-RAG vs RAG).
 
 **Out of scope:** auth, billing, notifications, real tool connectors, competitive intelligence.
 
-*(None of the above is implemented yet; this section describes intended work, not shipped features.)*
+*(Items under "Next" and "P1" are not implemented yet; those sections describe intended work, not
+shipped features.)*
 
-## 15. Running Locally
+## 16. Running Locally
 
 **Prerequisites:** Python 3.11+, and (for production mode) PostgreSQL.
 

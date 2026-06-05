@@ -25,11 +25,13 @@ from app.observability.logging import configure_logging
 from app.stages.stage1.runner import Stage1SignalRunner, build_stage1_runner
 from app.stages.stage2.runner import Stage2FeatureRunner, build_stage2_runner
 from app.stages.stage3.runner import Stage3ConflictRunner, build_stage3_runner
+from app.stages.stage4.runner import Stage4DecisionRunner, build_stage4_runner
 
 __all__ = [
     "make_claude_stage1_runner",
     "make_claude_stage2_runner",
     "make_claude_stage3_runner",
+    "make_claude_stage4_runner",
     "attach_claude_runner",
     "create_production_app",
 ]
@@ -95,6 +97,22 @@ def make_claude_stage3_runner(
     )
 
 
+def make_claude_stage4_runner(
+    config: ClaudeClientConfig | None = None,
+    *,
+    retry_policy: RetryPolicy | None = None,
+) -> Stage4DecisionRunner:
+    """Build a Stage 4 runner backed by a real Claude client."""
+
+    resolved_config = config or ClaudeClientConfig.from_env()
+    client = ClaudeToolClient(resolved_config)
+    return build_stage4_runner(
+        client,
+        retry_policy=retry_policy or _PRODUCTION_RETRY_POLICY,
+        sleep=time.sleep,
+    )
+
+
 def attach_claude_runner(
     app: FastAPI,
     *,
@@ -104,22 +122,25 @@ def attach_claude_runner(
     """Construct the Claude-backed Stage 1/2/3 runners and register them on app.state.
 
     These are the integration points with the existing dependency injection:
-    ``get_stage1_runner`` / ``get_stage2_runner`` / ``get_stage3_runner`` read
-    ``app.state.stage1_runner`` / ``stage2_runner`` / ``stage3_runner`` respectively.
+    ``get_stage1_runner`` / ``get_stage2_runner`` / ``get_stage3_runner`` /
+    ``get_stage4_runner`` read ``app.state.stage1_runner`` / ``stage2_runner`` /
+    ``stage3_runner`` / ``stage4_runner`` respectively.
     """
 
     resolved = config or ClaudeClientConfig.from_env()
     stage1 = make_claude_stage1_runner(resolved, retry_policy=retry_policy)
     stage2 = make_claude_stage2_runner(resolved, retry_policy=retry_policy)
     stage3 = make_claude_stage3_runner(resolved, retry_policy=retry_policy)
+    stage4 = make_claude_stage4_runner(resolved, retry_policy=retry_policy)
     app.state.stage1_runner = stage1
     app.state.stage2_runner = stage2
     app.state.stage3_runner = stage3
+    app.state.stage4_runner = stage4
     return stage1
 
 
 def create_production_app(*, config: ClaudeClientConfig | None = None) -> FastAPI:
-    """Compose the existing app with live Claude-backed Stage 1 and Stage 2 runners."""
+    """Compose the existing app with live Claude-backed Stage 1-4 runners."""
 
     configure_logging()
     app = create_app()

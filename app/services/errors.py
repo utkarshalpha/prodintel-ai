@@ -19,6 +19,8 @@ __all__ = [
     "FeatureExtractionFailedError",
     "ConflictNotFoundError",
     "ConflictDetectionFailedError",
+    "DecisionNotFoundError",
+    "DecisionSynthesisFailedError",
 ]
 
 
@@ -98,3 +100,20 @@ class ConflictDetectionFailedError(SignalServiceError):
         self.stage_result = stage_result
         reason = stage_result.error.message if stage_result.error else "unknown"
         super().__init__(f"conflict detection failed: {reason}")
+
+
+class DecisionNotFoundError(SignalServiceError):
+    """The requested decision does not exist (maps to HTTP 404)."""
+
+    def __init__(self, decision_id: uuid.UUID) -> None:
+        self.decision_id = decision_id
+        super().__init__(f"decision {decision_id} not found")
+
+
+class DecisionSynthesisFailedError(SignalServiceError):
+    """Stage 4 ran but produced no valid, evidence-traceable result (HTTP 422)."""
+
+    def __init__(self, stage_result: "StageResult") -> None:  # noqa: F821 - runtime-only
+        self.stage_result = stage_result
+        reason = stage_result.error.message if stage_result.error else "unknown"
+        super().__init__(f"decision synthesis failed: {reason}")
