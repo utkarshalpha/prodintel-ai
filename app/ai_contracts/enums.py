@@ -37,6 +37,7 @@ __all__ = [
     "SubjectType",
     "Stance",
     "FrameworkName",
+    "KnowledgeSourceType",
     "DecisionRecommendation",
     "DecisionStatus",
     "EvidenceType",
@@ -126,13 +127,36 @@ class Stance(str, Enum):
 
 
 class FrameworkName(str, Enum):
-    """Supported product-management knowledge sources for the RAG corpus."""
+    """Specific product-management framework a knowledge artifact is attributed to.
+
+    Mixed-case values are intentional: these are the canonical, human-facing names
+    of the frameworks (``"RICE"``, ``"MoSCoW"``, ``"Kano"``), not lowercase slugs.
+    Any migration materializing this enum must use these exact values verbatim --
+    see :mod:`alembic.versions.0006_create_knowledge_source_and_chunk`.
+    """
 
     RICE = "RICE"
     JTBD = "JTBD"
     MOSCOW = "MoSCoW"
     STRATEGY = "STRATEGY"
     PRD_TEMPLATE = "PRD_TEMPLATE"
+    KANO = "Kano"
+
+
+class KnowledgeSourceType(str, Enum):
+    """The *kind* of knowledge source ingested into the RAG corpus.
+
+    Distinct from :class:`FrameworkName` (which records *which* framework, when
+    applicable): a source's ``source_type`` is its category, and its optional
+    ``framework`` attribution pins the specific framework. For example a RICE
+    reference is ``(FRAMEWORK, framework=RICE)``; a PM book is ``(BOOK, ...)``; a
+    company strategy memo is ``(COMPANY_STRATEGY, framework=None)``.
+    """
+
+    FRAMEWORK = "framework"
+    BOOK = "book"
+    HISTORICAL_DECISION = "historical_decision"
+    COMPANY_STRATEGY = "company_strategy"
 
 
 class DecisionRecommendation(str, Enum):

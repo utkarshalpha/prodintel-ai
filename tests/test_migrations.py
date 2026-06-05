@@ -8,6 +8,7 @@ removes the tables.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
 import app.models  # noqa: F401  -- register tables on Base.metadata
+from app.ai_contracts.enums import FrameworkName
 from app.db.base import Base
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,19 @@ _ALL_TABLES = (
     "decision",
     "decision_evidence",
     "decision_conflict",
+    "knowledge_source",
+    "knowledge_chunk",
 )
+
+
+def _load_revision_module(filename: str):
+    """Import an Alembic revision file by path (names start with a digit)."""
+
+    path = _ALEMBIC_DIR / "versions" / filename
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _columns(engine, table: str) -> set[str]:
@@ -130,6 +144,37 @@ def test_migration_creates_decision_reverse_provenance_index(sqlite_url: str) ->
     engine.dispose()
 
 
+def test_migration_creates_knowledge_chunk_indexes(sqlite_url: str) -> None:
+    """The knowledge_chunk lookup indexes (source_id, chroma_id, corpus_version) exist."""
+
+    command.upgrade(_alembic_config(sqlite_url), "head")
+    engine = create_engine(sqlite_url, future=True)
+    index_names = {idx["name"] for idx in inspect(engine).get_indexes("knowledge_chunk")}
+    assert {
+        "ix_knowledge_chunk_source_id",
+        "ix_knowledge_chunk_chroma_id",
+        "ix_knowledge_chunk_corpus_version",
+    } <= index_names
+    engine.dispose()
+
+
+def test_migration_0006_framework_enum_labels_match_python_enum() -> None:
+    """HIGH guard: the 0006 framework-enum labels equal FrameworkName.value verbatim.
+
+    The SQLite parity check cannot see enum labels, so a lowercase slip in the
+    migration (which Postgres would reject at insert time) would pass everything
+    else. This asserts the migration's hardcoded labels -- including the mixed-case
+    spellings and the newly added ``Kano`` -- match the canonical enum exactly.
+    """
+
+    module = _load_revision_module("0006_create_knowledge_source_and_chunk.py")
+    expected = {member.value for member in FrameworkName}
+    assert set(module._knowledge_source_framework.enums) == expected
+    assert set(module._knowledge_chunk_framework.enums) == expected
+    # The mixed-case spellings specifically must survive (regression on the HIGH bug).
+    assert "MoSCoW" in expected and "Kano" in expected
+
+
 def test_downgrade_removes_tables(sqlite_url: str) -> None:
     cfg = _alembic_config(sqlite_url)
     command.upgrade(cfg, "head")
@@ -140,4 +185,6 @@ def test_downgrade_removes_tables(sqlite_url: str) -> None:
     assert "signal" not in tables
     assert "parsed_signal" not in tables
     assert "decision" not in tables
+    assert "knowledge_source" not in tables
+    assert "knowledge_chunk" not in tables
     engine.dispose()
