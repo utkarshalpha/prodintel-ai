@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from uuid import uuid4
 
 from app.ai_contracts.base import ModelMeta
@@ -12,9 +13,11 @@ from app.stages.stage4.validators import DECISION_ISSUE_CODES, DecisionIntegrity
 F1, F2 = uuid4(), uuid4()
 S1, S2, S_UNKNOWN = uuid4(), uuid4(), uuid4()
 C1, C_UNKNOWN = uuid4(), uuid4()
+K1, K2, K_UNKNOWN = uuid4(), uuid4(), uuid4()  # framework-knowledge chunk ids
 
 # Conflict C1 is about feature F1.
 CONFLICT_SUBJECTS = {C1: F1}
+FRAMEWORK_POOL = (K1, K2)
 
 
 def _decision(
@@ -23,6 +26,7 @@ def _decision(
     subject=F1,
     evidence=(S1, S2),
     acknowledged=(C1,),
+    framework=(),
     rank=1,
 ):
     return DecisionContract(
@@ -35,6 +39,7 @@ def _decision(
         priority_rank=rank,
         acknowledged_conflict_ids=list(acknowledged),
         evidence_signal_ids=list(evidence),
+        framework_citation_ids=list(framework),
         confidence={"score": 0.8},
     )
 
@@ -131,6 +136,92 @@ def test_unacknowledged_conflict_detected(model_meta: ModelMeta) -> None:
     )
     assert any(cid == C1 for _, cid in report.unacknowledged_conflicts)
     assert report.passed is False
+
+
+# --------------------------------------------------------------------------- #
+# Framework-citation grounding (Phase 7A)
+# --------------------------------------------------------------------------- #
+def test_empty_framework_citations_valid(model_meta: ModelMeta) -> None:
+    """A decision citing no framework passes even when a pool is injected."""
+
+    report = validate_decision_integrity(
+        _synthesis([_decision(framework=())], model_meta),
+        [F1],
+        [S1, S2],
+        CONFLICT_SUBJECTS,
+        FRAMEWORK_POOL,
+    )
+    assert report.unknown_framework_citations == () and report.passed is True
+
+
+def test_grounded_framework_citations_valid(model_meta: ModelMeta) -> None:
+    report = validate_decision_integrity(
+        _synthesis([_decision(framework=(K1, K2))], model_meta),
+        [F1],
+        [S1, S2],
+        CONFLICT_SUBJECTS,
+        FRAMEWORK_POOL,
+    )
+    assert report.unknown_framework_citations == () and report.passed is True
+
+
+def test_unknown_framework_citation_fails(model_meta: ModelMeta) -> None:
+    report = validate_decision_integrity(
+        _synthesis([_decision(framework=(K1, K_UNKNOWN))], model_meta),
+        [F1],
+        [S1, S2],
+        CONFLICT_SUBJECTS,
+        FRAMEWORK_POOL,
+    )
+    assert any(cid == K_UNKNOWN for _, cid in report.unknown_framework_citations)
+    assert all(cid != K1 for _, cid in report.unknown_framework_citations)  # grounded one OK
+    assert report.passed is False
+
+
+def test_framework_grounding_does_not_affect_other_rules(model_meta: ModelMeta) -> None:
+    """A sound, grounded decision passes every rule; an unrelated failure is unchanged."""
+
+    sound = validate_decision_integrity(
+        _synthesis([_decision(framework=(K1,))], model_meta), [F1], [S1, S2], CONFLICT_SUBJECTS, FRAMEWORK_POOL
+    )
+    assert sound.passed is True
+
+    # An evidence failure is still reported, and is independent of framework grounding.
+    bad_evidence = validate_decision_integrity(
+        _synthesis([_decision(evidence=(S_UNKNOWN,), framework=(K1,))], model_meta),
+        [F1],
+        [S1, S2],
+        CONFLICT_SUBJECTS,
+        FRAMEWORK_POOL,
+    )
+    assert bad_evidence.unknown_evidence and bad_evidence.unknown_framework_citations == ()
+    assert bad_evidence.passed is False
+
+
+def test_report_serialization_includes_framework_field(model_meta: ModelMeta) -> None:
+    grounded = validate_decision_integrity(
+        _synthesis([_decision(framework=(K1,))], model_meta), [F1], [S1, S2], CONFLICT_SUBJECTS, FRAMEWORK_POOL
+    )
+    grounded_dict = asdict(grounded)
+    assert grounded_dict["unknown_framework_citations"] == ()
+
+    bad = validate_decision_integrity(
+        _synthesis([_decision(framework=(K_UNKNOWN,))], model_meta), [F1], [S1, S2], CONFLICT_SUBJECTS, FRAMEWORK_POOL
+    )
+    assert asdict(bad)["unknown_framework_citations"] == ((0, K_UNKNOWN),)
+
+
+def test_backward_compatibility_without_framework_pool(model_meta: ModelMeta) -> None:
+    """The 4-arg call (no pool) and the default contract field are unchanged."""
+
+    # Contract default: no framework citations supplied -> empty list.
+    assert _decision().framework_citation_ids == []
+
+    # Legacy 4-positional-arg call still validates a sound, framework-less decision.
+    report = validate_decision_integrity(
+        _synthesis([_decision()], model_meta), [F1], [S1, S2], CONFLICT_SUBJECTS
+    )
+    assert report.unknown_framework_citations == () and report.passed is True
 
 
 # --------------------------------------------------------------------------- #

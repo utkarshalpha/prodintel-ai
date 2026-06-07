@@ -72,6 +72,14 @@ class DecisionContract(FrozenModel):
         min_length=1,
         description="Signals substantiating this decision (a subset of the input signals).",
     )
+    framework_citation_ids: list[UUID] = Field(
+        default_factory=list,
+        description=(
+            "Framework-knowledge chunk ids this decision grounds on (a subset of the retrieved "
+            "framework pool). Optional -- a decision may cite no framework -- but any id listed "
+            "must be a real retrieved chunk (enforced by the decision-integrity gate)."
+        ),
+    )
     confidence: ConfidenceBlock = Field(..., description="Decomposed confidence for this decision.")
 
 

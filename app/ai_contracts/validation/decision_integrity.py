@@ -15,9 +15,12 @@ every decision satisfies:
 3. every evidence id is a real input signal (every claim traceable; no unsupported
    evidence),
 4. every acknowledged conflict id is a real input conflict whose subject is *this*
-   decision's subject (no fabricated or mis-attributed conflicts), and
+   decision's subject (no fabricated or mis-attributed conflicts),
 5. every input conflict over this decision's subject is acknowledged -- a decision
-   cannot silently ignore a known conflict about the feature it decides.
+   cannot silently ignore a known conflict about the feature it decides, and
+6. every framework citation id is a real chunk in the injected framework pool -- a
+   decision cannot ground on a framework passage that was not retrieved (no fabricated
+   citations). Framework citation is optional, but any citation listed must be real.
 
 Like the grounding, provenance, and conflict-integrity gates, this is
 dependency-free and returns a structured report; the adapter
@@ -48,6 +51,7 @@ class DecisionIntegrityReport:
     unknown_conflicts: tuple[tuple[int, UUID], ...]           # (decision_index, fabricated conflict_id)
     conflict_subject_mismatch: tuple[tuple[int, UUID], ...]   # (decision_index, conflict about another subject)
     unacknowledged_conflicts: tuple[tuple[int, UUID], ...]    # (decision_index, ignored conflict over the subject)
+    unknown_framework_citations: tuple[tuple[int, UUID], ...] # (decision_index, chunk_id not in the pool)
 
     @property
     def passed(self) -> bool:
@@ -60,6 +64,7 @@ class DecisionIntegrityReport:
             or self.unknown_conflicts
             or self.conflict_subject_mismatch
             or self.unacknowledged_conflicts
+            or self.unknown_framework_citations
         )
 
 
@@ -68,8 +73,10 @@ def validate_decision_integrity(
     input_feature_ids: Iterable[UUID],
     input_signal_ids: Iterable[UUID],
     conflict_subjects: Mapping[UUID, UUID],
+    input_framework_chunk_ids: Iterable[UUID] = (),
 ) -> DecisionIntegrityReport:
-    """Verify subject validity, evidence traceability, and conflict accounting.
+    """Verify subject validity, evidence traceability, conflict accounting, and
+    framework-citation grounding.
 
     Parameters
     ----------
@@ -83,11 +90,17 @@ def validate_decision_integrity(
         Mapping of each input conflict id to the feature id it is about. Used both to
         validate acknowledged conflicts and to require that every conflict over a
         decision's subject is acknowledged.
+    input_framework_chunk_ids:
+        Knowledge-chunk ids in the injected framework-retrieval pool. A decision may
+        cite none, but any ``framework_citation_ids`` it lists must be in this set.
+        Defaults to empty so callers that do not ground on a framework corpus are
+        unaffected (a decision with no framework citations always passes this rule).
     """
 
     feature_set = set(input_feature_ids)
     signal_set = set(input_signal_ids)
     conflict_ids = set(conflict_subjects)
+    framework_pool = set(input_framework_chunk_ids)
 
     unknown_subjects: list[tuple[int, UUID]] = []
     duplicate_subjects: list[int] = []
@@ -95,6 +108,7 @@ def validate_decision_integrity(
     unknown_conflicts: list[tuple[int, UUID]] = []
     conflict_subject_mismatch: list[tuple[int, UUID]] = []
     unacknowledged_conflicts: list[tuple[int, UUID]] = []
+    unknown_framework_citations: list[tuple[int, UUID]] = []
 
     seen_subjects: set[UUID] = set()
 
@@ -122,6 +136,11 @@ def validate_decision_integrity(
         for conflict_id in required - acknowledged:
             unacknowledged_conflicts.append((index, conflict_id))
 
+        # Every framework citation must be a real chunk in the injected pool.
+        for chunk_id in decision.framework_citation_ids:
+            if chunk_id not in framework_pool:
+                unknown_framework_citations.append((index, chunk_id))
+
     return DecisionIntegrityReport(
         unknown_subjects=tuple(unknown_subjects),
         duplicate_subjects=tuple(duplicate_subjects),
@@ -129,4 +148,5 @@ def validate_decision_integrity(
         unknown_conflicts=tuple(dict.fromkeys(unknown_conflicts)),
         conflict_subject_mismatch=tuple(dict.fromkeys(conflict_subject_mismatch)),
         unacknowledged_conflicts=tuple(dict.fromkeys(unacknowledged_conflicts)),
+        unknown_framework_citations=tuple(dict.fromkeys(unknown_framework_citations)),
     )
