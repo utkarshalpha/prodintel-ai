@@ -1,0 +1,4 @@
+# Dependencies for the recruiter-facing Streamlit showcase.
+# Run locally:  pip install -r showcase/requirements.txt && streamlit run showcase/app.py
+# Also consumed by Streamlit Community Cloud for the hosted demo.
+streamlit>=1.32

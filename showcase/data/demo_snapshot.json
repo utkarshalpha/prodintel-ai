@@ -1,0 +1,859 @@
+{
+  "meta": {
+    "scenario": "TeamFlow -- B2B SaaS moving upmarket to enterprise",
+    "schema_version": "1.0",
+    "generated_by": "scripts/build_demo_snapshot.py",
+    "note": "Generated from a real pipeline run (real services, validation gates, provenance edges, framework grounding, persistence, and /why). The LLM boundary is deterministically stubbed, exactly as in the test suite; entity ids are remapped to stable role labels and timestamps are pinned so the artifact is byte-deterministic."
+  },
+  "signals": [
+    {
+      "id": "sig-01",
+      "source_type": "sales",
+      "raw_text": "Enterprise SSO (SAML) is a hard blocker for the Acme Corp deal worth $240K ARR. Two other enterprise prospects asked for it this month.",
+      "source_ref": null,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "content_hash": "f3341159e4b9740ff4d260c13ef1c09df410976d02f7ad3a12334e9c4138a4aa"
+    },
+    {
+      "id": "sig-02",
+      "source_type": "engineering",
+      "raw_text": "Building SAML SSO properly is high-risk: it touches authentication across the whole platform and needs roughly 6 to 8 weeks plus a security review.",
+      "source_ref": null,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "content_hash": "3cda3060e4a5435cd8bfce0ed96d70ad10c49b8d0199a2fe42e6a34ca43a21cf"
+    },
+    {
+      "id": "sig-03",
+      "source_type": "customer",
+      "raw_text": "Our security team will not approve TeamFlow for company-wide rollout without SSO and SCIM user provisioning.",
+      "source_ref": null,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "content_hash": "fd0be99d13719337845bd1f432b7050fe93e21695648b446e8d62b4a017f4414"
+    },
+    {
+      "id": "sig-04",
+      "source_type": "support",
+      "raw_text": "Admins send 12 to 15 tickets a week asking for directory sync and bulk user provisioning.",
+      "source_ref": null,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "content_hash": "36930283c64763984d138ba760987eb89a5536442c7866d07a9f23a5428d36ce"
+    },
+    {
+      "id": "sig-05",
+      "source_type": "leadership",
+      "raw_text": "Our goal this year is moving upmarket to enterprise, so anything that unblocks enterprise logos should be prioritized this quarter.",
+      "source_ref": null,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "content_hash": "4349be95ea59d5aa1f1b9352d9063ad1a4594aef85a4ee28f95a58446f3a6a28"
+    },
+    {
+      "id": "sig-06",
+      "source_type": "engineering",
+      "raw_text": "We already committed to shipping mobile offline mode this quarter, and the team cannot deliver both SSO and offline well at once.",
+      "source_ref": null,
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "content_hash": "cea241fb1c3bd1882519e5ad052abca327de2e6aa098fb611797e8a3d7f80795"
+    }
+  ],
+  "analyzed_signals": [
+    {
+      "signal_id": "sig-01",
+      "intent": "Unblock the Acme enterprise deal by shipping SSO",
+      "stakeholder_type": "sales",
+      "urgency": 5,
+      "sentiment": -0.4,
+      "confidence": {
+        "score": 0.86,
+        "basis": "strong",
+        "components": {
+          "span_grounding_ratio": 1.0
+        }
+      },
+      "claims": [
+        {
+          "text": "Enterprise SSO (SAML) is a hard blocker",
+          "source_span": [
+            0,
+            39
+          ],
+          "quoted_text": "Enterprise SSO (SAML) is a hard blocker",
+          "claim_confidence": 0.93
+        },
+        {
+          "text": "Acme Corp deal worth $240K ARR",
+          "source_span": [
+            48,
+            78
+          ],
+          "quoted_text": "Acme Corp deal worth $240K ARR",
+          "claim_confidence": 0.93
+        }
+      ]
+    },
+    {
+      "signal_id": "sig-02",
+      "intent": "Flag SSO as a high-risk, multi-week effort needing a security review",
+      "stakeholder_type": "engineering",
+      "urgency": 4,
+      "sentiment": -0.3,
+      "confidence": {
+        "score": 0.86,
+        "basis": "strong",
+        "components": {
+          "span_grounding_ratio": 1.0
+        }
+      },
+      "claims": [
+        {
+          "text": "Building SAML SSO properly is high-risk",
+          "source_span": [
+            0,
+            39
+          ],
+          "quoted_text": "Building SAML SSO properly is high-risk",
+          "claim_confidence": 0.93
+        },
+        {
+          "text": "needs roughly 6 to 8 weeks plus a security review",
+          "source_span": [
+            97,
+            146
+          ],
+          "quoted_text": "needs roughly 6 to 8 weeks plus a security review",
+          "claim_confidence": 0.93
+        }
+      ]
+    },
+    {
+      "signal_id": "sig-03",
+      "intent": "Require SSO and SCIM before approving company-wide rollout",
+      "stakeholder_type": "customer",
+      "urgency": 4,
+      "sentiment": -0.2,
+      "confidence": {
+        "score": 0.86,
+        "basis": "strong",
+        "components": {
+          "span_grounding_ratio": 1.0
+        }
+      },
+      "claims": [
+        {
+          "text": "security team will not approve TeamFlow for company-wide rollout",
+          "source_span": [
+            4,
+            68
+          ],
+          "quoted_text": "security team will not approve TeamFlow for company-wide rollout",
+          "claim_confidence": 0.93
+        },
+        {
+          "text": "without SSO and SCIM user provisioning",
+          "source_span": [
+            69,
+            107
+          ],
+          "quoted_text": "without SSO and SCIM user provisioning",
+          "claim_confidence": 0.93
+        }
+      ]
+    },
+    {
+      "signal_id": "sig-04",
+      "intent": "Reduce manual user-management load via directory sync",
+      "stakeholder_type": "support",
+      "urgency": 3,
+      "sentiment": -0.1,
+      "confidence": {
+        "score": 0.86,
+        "basis": "strong",
+        "components": {
+          "span_grounding_ratio": 1.0
+        }
+      },
+      "claims": [
+        {
+          "text": "12 to 15 tickets a week asking for directory sync",
+          "source_span": [
+            12,
+            61
+          ],
+          "quoted_text": "12 to 15 tickets a week asking for directory sync",
+          "claim_confidence": 0.93
+        },
+        {
+          "text": "bulk user provisioning",
+          "source_span": [
+            66,
+            88
+          ],
+          "quoted_text": "bulk user provisioning",
+          "claim_confidence": 0.93
+        }
+      ]
+    },
+    {
+      "signal_id": "sig-05",
+      "intent": "Prioritize enterprise-unblocking work this quarter",
+      "stakeholder_type": "leadership",
+      "urgency": 4,
+      "sentiment": 0.2,
+      "confidence": {
+        "score": 0.86,
+        "basis": "strong",
+        "components": {
+          "span_grounding_ratio": 1.0
+        }
+      },
+      "claims": [
+        {
+          "text": "moving upmarket to enterprise",
+          "source_span": [
+            22,
+            51
+          ],
+          "quoted_text": "moving upmarket to enterprise",
+          "claim_confidence": 0.93
+        },
+        {
+          "text": "anything that unblocks enterprise logos should be prioritized this quarter",
+          "source_span": [
+            56,
+            130
+          ],
+          "quoted_text": "anything that unblocks enterprise logos should be prioritized this quarter",
+          "claim_confidence": 0.93
+        }
+      ]
+    },
+    {
+      "signal_id": "sig-06",
+      "intent": "Surface the capacity conflict between SSO and mobile offline",
+      "stakeholder_type": "engineering",
+      "urgency": 3,
+      "sentiment": -0.2,
+      "confidence": {
+        "score": 0.86,
+        "basis": "strong",
+        "components": {
+          "span_grounding_ratio": 1.0
+        }
+      },
+      "claims": [
+        {
+          "text": "already committed to shipping mobile offline mode this quarter",
+          "source_span": [
+            3,
+            65
+          ],
+          "quoted_text": "already committed to shipping mobile offline mode this quarter",
+          "claim_confidence": 0.93
+        },
+        {
+          "text": "the team cannot deliver both SSO and offline well at once",
+          "source_span": [
+            71,
+            128
+          ],
+          "quoted_text": "the team cannot deliver both SSO and offline well at once",
+          "claim_confidence": 0.93
+        }
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "feat-sso",
+      "title": "Enterprise SSO & SCIM Provisioning",
+      "jtbd": "When I roll out TeamFlow company-wide, I want SAML SSO with directory-synced provisioning, so I can satisfy my security policy",
+      "description": "SAML single sign-on and directory-synced user provisioning for enterprise rollout.",
+      "status": "candidate",
+      "confidence": {
+        "score": 0.88,
+        "basis": "strong",
+        "components": {
+          "cluster_cohesion": 0.9
+        }
+      },
+      "source_signal_ids": [
+        "sig-01",
+        "sig-02",
+        "sig-03",
+        "sig-04"
+      ]
+    },
+    {
+      "id": "feat-offline",
+      "title": "Mobile Offline Mode",
+      "jtbd": "When I am traveling without connectivity, I want to view and edit tasks offline, so I can stay productive",
+      "description": "View and edit tasks without connectivity, syncing when back online.",
+      "status": "candidate",
+      "confidence": {
+        "score": 0.79,
+        "basis": "moderate",
+        "components": {
+          "cluster_cohesion": 0.8
+        }
+      },
+      "source_signal_ids": [
+        "sig-06"
+      ]
+    }
+  ],
+  "unassigned_signal_ids": [
+    "sig-05"
+  ],
+  "conflicts": [
+    {
+      "id": "conf-risk",
+      "conflict_type": "risk",
+      "severity": 4,
+      "status": "open",
+      "subject_type": "feature",
+      "subject_id": "feat-sso",
+      "confidence": {
+        "score": 0.82,
+        "basis": "strong",
+        "components": {
+          "opposition_strength": 0.85
+        }
+      },
+      "parties": [
+        {
+          "stakeholder_type": "sales",
+          "stance": "advocate",
+          "summary": "Enterprise SSO unblocks the Acme deal and two more prospects.",
+          "evidence_signal_ids": [
+            "sig-01"
+          ]
+        },
+        {
+          "stakeholder_type": "engineering",
+          "stance": "risk_flag",
+          "summary": "SSO is a high-risk, ~6-8 week auth change needing a security review.",
+          "evidence_signal_ids": [
+            "sig-02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "conf-resource",
+      "conflict_type": "resource",
+      "severity": 3,
+      "status": "open",
+      "subject_type": "feature",
+      "subject_id": "feat-sso",
+      "confidence": {
+        "score": 0.78,
+        "basis": "moderate",
+        "components": {
+          "opposition_strength": 0.8
+        }
+      },
+      "parties": [
+        {
+          "stakeholder_type": "sales",
+          "stance": "advocate",
+          "summary": "SSO must be the priority this quarter to unblock enterprise revenue.",
+          "evidence_signal_ids": [
+            "sig-01"
+          ]
+        },
+        {
+          "stakeholder_type": "engineering",
+          "stance": "risk_flag",
+          "summary": "The team cannot deliver both SSO and mobile offline well in one quarter.",
+          "evidence_signal_ids": [
+            "sig-06"
+          ]
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dec-01",
+      "subject_id": "feat-sso",
+      "recommendation": "build_now",
+      "title": "Build Enterprise SSO & SCIM this quarter, behind a security review",
+      "rationale": "A $240K deal and two more enterprise prospects are blocked on SSO, and a customer security team requires SCIM provisioning -- high reach and revenue-gating impact. RICE ranks this highly even at high effort, and Kano classes SSO as a 'must-be' for enterprise buyers. The engineering risk is acknowledged and addressed with a mandatory security review and a phased rollout; the capacity conflict is acknowledged by deferring mobile offline to next quarter.",
+      "priority_rank": 1,
+      "status": "proposed",
+      "confidence": {
+        "score": 0.84,
+        "basis": "strong",
+        "components": {
+          "evidence_coverage": 0.9,
+          "framework_support": 0.82
+        }
+      },
+      "evidence_signal_ids": [
+        "sig-01",
+        "sig-02",
+        "sig-03",
+        "sig-04"
+      ],
+      "acknowledged_conflict_ids": [
+        "conf-resource",
+        "conf-risk"
+      ],
+      "framework_citation_ids": [
+        "chunk-kano",
+        "chunk-rice"
+      ]
+    },
+    {
+      "id": "dec-02",
+      "subject_id": "feat-offline",
+      "recommendation": "build_later",
+      "title": "Defer Mobile Offline Mode to next quarter",
+      "rationale": "Valuable but not revenue-gating this quarter; deferred to resolve the capacity conflict with the higher-priority SSO work.",
+      "priority_rank": 2,
+      "status": "proposed",
+      "confidence": {
+        "score": 0.7,
+        "basis": "moderate",
+        "components": {
+          "evidence_coverage": 0.75
+        }
+      },
+      "evidence_signal_ids": [
+        "sig-06"
+      ],
+      "acknowledged_conflict_ids": [],
+      "framework_citation_ids": []
+    }
+  ],
+  "framework_pool": [
+    {
+      "chunk_id": "chunk-rice",
+      "framework": "RICE",
+      "source_title": "RICE Prioritization (Intercom)",
+      "content": "RICE scores prioritize by Reach x Impact x Confidence / Effort; revenue-gating work with broad reach ranks highly even at high effort.",
+      "retrieval_score": 0.83
+    },
+    {
+      "chunk_id": "chunk-kano",
+      "framework": "Kano",
+      "source_title": "Kano Model -- Feature Categorization",
+      "content": "'Must-be' features such as SSO for enterprise buyers cause disproportionate dissatisfaction when absent; their presence is expected.",
+      "retrieval_score": 0.79
+    }
+  ],
+  "framework_citations": {
+    "dec-01": [
+      {
+        "chunk_id": "chunk-rice",
+        "retrieval_score": 0.83,
+        "relationship_type": "grounds",
+        "evidence_type": "framework_citation"
+      },
+      {
+        "chunk_id": "chunk-kano",
+        "retrieval_score": 0.79,
+        "relationship_type": "grounds",
+        "evidence_type": "framework_citation"
+      }
+    ],
+    "dec-02": []
+  },
+  "why": {
+    "schema_version": "1.0",
+    "decision": {
+      "id": "dec-01",
+      "workspace_id": null,
+      "subject_type": "feature",
+      "subject_id": "feat-sso",
+      "recommendation": "build_now",
+      "title": "Build Enterprise SSO & SCIM this quarter, behind a security review",
+      "rationale": "A $240K deal and two more enterprise prospects are blocked on SSO, and a customer security team requires SCIM provisioning -- high reach and revenue-gating impact. RICE ranks this highly even at high effort, and Kano classes SSO as a 'must-be' for enterprise buyers. The engineering risk is acknowledged and addressed with a mandatory security review and a phased rollout; the capacity conflict is acknowledged by deferring mobile offline to next quarter.",
+      "priority_rank": 1,
+      "status": "proposed",
+      "confidence": {
+        "score": 0.84,
+        "basis": "strong",
+        "components": {
+          "evidence_coverage": 0.9,
+          "framework_support": 0.82
+        }
+      },
+      "created_at": "2026-01-01T00:00:00+00:00"
+    },
+    "subject_feature": {
+      "id": "feat-sso",
+      "title": "Enterprise SSO & SCIM Provisioning",
+      "jtbd": "When I roll out TeamFlow company-wide, I want SAML SSO with directory-synced provisioning, so I can satisfy my security policy",
+      "status": "candidate",
+      "confidence": {
+        "score": 0.88,
+        "basis": "strong",
+        "components": {
+          "cluster_cohesion": 0.9
+        }
+      },
+      "source_signal_ids": [
+        "sig-01",
+        "sig-02",
+        "sig-03",
+        "sig-04"
+      ]
+    },
+    "direct_evidence": [
+      {
+        "signal_id": "sig-01",
+        "created_at": "2026-01-01T00:00:00+00:00"
+      },
+      {
+        "signal_id": "sig-02",
+        "created_at": "2026-01-01T00:00:00+00:00"
+      },
+      {
+        "signal_id": "sig-03",
+        "created_at": "2026-01-01T00:00:00+00:00"
+      },
+      {
+        "signal_id": "sig-04",
+        "created_at": "2026-01-01T00:00:00+00:00"
+      }
+    ],
+    "conflicts": [
+      {
+        "id": "conf-resource",
+        "conflict_type": "resource",
+        "severity": 3,
+        "status": "open",
+        "confidence": {
+          "score": 0.78,
+          "basis": "moderate",
+          "components": {
+            "opposition_strength": 0.8
+          }
+        },
+        "parties": [
+          {
+            "stakeholder_type": "sales",
+            "stance": "advocate",
+            "summary": "SSO must be the priority this quarter to unblock enterprise revenue.",
+            "evidence_signal_ids": [
+              "sig-01"
+            ]
+          },
+          {
+            "stakeholder_type": "engineering",
+            "stance": "risk_flag",
+            "summary": "The team cannot deliver both SSO and mobile offline well in one quarter.",
+            "evidence_signal_ids": [
+              "sig-06"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "conf-risk",
+        "conflict_type": "risk",
+        "severity": 4,
+        "status": "open",
+        "confidence": {
+          "score": 0.82,
+          "basis": "strong",
+          "components": {
+            "opposition_strength": 0.85
+          }
+        },
+        "parties": [
+          {
+            "stakeholder_type": "sales",
+            "stance": "advocate",
+            "summary": "Enterprise SSO unblocks the Acme deal and two more prospects.",
+            "evidence_signal_ids": [
+              "sig-01"
+            ]
+          },
+          {
+            "stakeholder_type": "engineering",
+            "stance": "risk_flag",
+            "summary": "SSO is a high-risk, ~6-8 week auth change needing a security review.",
+            "evidence_signal_ids": [
+              "sig-02"
+            ]
+          }
+        ]
+      }
+    ],
+    "signals": [
+      {
+        "id": "sig-01",
+        "source_type": "sales",
+        "source_ref": null,
+        "raw_text": "Enterprise SSO (SAML) is a hard blocker for the Acme Corp deal worth $240K ARR. Two other enterprise prospects asked for it this month.",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "analysis": {
+          "intent": "Unblock the Acme enterprise deal by shipping SSO",
+          "stakeholder_type": "sales",
+          "urgency": 5,
+          "sentiment": -0.4,
+          "confidence": {
+            "score": 0.86,
+            "basis": "strong",
+            "components": {
+              "span_grounding_ratio": 1.0
+            }
+          },
+          "claims": [
+            {
+              "text": "Enterprise SSO (SAML) is a hard blocker",
+              "source_span": [
+                0,
+                39
+              ],
+              "quoted_text": "Enterprise SSO (SAML) is a hard blocker",
+              "claim_confidence": 0.93
+            },
+            {
+              "text": "Acme Corp deal worth $240K ARR",
+              "source_span": [
+                48,
+                78
+              ],
+              "quoted_text": "Acme Corp deal worth $240K ARR",
+              "claim_confidence": 0.93
+            }
+          ]
+        },
+        "reached_via": [
+          "conflict:conf-resource",
+          "conflict:conf-risk",
+          "direct_evidence",
+          "feature:feat-sso"
+        ]
+      },
+      {
+        "id": "sig-02",
+        "source_type": "engineering",
+        "source_ref": null,
+        "raw_text": "Building SAML SSO properly is high-risk: it touches authentication across the whole platform and needs roughly 6 to 8 weeks plus a security review.",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "analysis": {
+          "intent": "Flag SSO as a high-risk, multi-week effort needing a security review",
+          "stakeholder_type": "engineering",
+          "urgency": 4,
+          "sentiment": -0.3,
+          "confidence": {
+            "score": 0.86,
+            "basis": "strong",
+            "components": {
+              "span_grounding_ratio": 1.0
+            }
+          },
+          "claims": [
+            {
+              "text": "Building SAML SSO properly is high-risk",
+              "source_span": [
+                0,
+                39
+              ],
+              "quoted_text": "Building SAML SSO properly is high-risk",
+              "claim_confidence": 0.93
+            },
+            {
+              "text": "needs roughly 6 to 8 weeks plus a security review",
+              "source_span": [
+                97,
+                146
+              ],
+              "quoted_text": "needs roughly 6 to 8 weeks plus a security review",
+              "claim_confidence": 0.93
+            }
+          ]
+        },
+        "reached_via": [
+          "conflict:conf-risk",
+          "direct_evidence",
+          "feature:feat-sso"
+        ]
+      },
+      {
+        "id": "sig-03",
+        "source_type": "customer",
+        "source_ref": null,
+        "raw_text": "Our security team will not approve TeamFlow for company-wide rollout without SSO and SCIM user provisioning.",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "analysis": {
+          "intent": "Require SSO and SCIM before approving company-wide rollout",
+          "stakeholder_type": "customer",
+          "urgency": 4,
+          "sentiment": -0.2,
+          "confidence": {
+            "score": 0.86,
+            "basis": "strong",
+            "components": {
+              "span_grounding_ratio": 1.0
+            }
+          },
+          "claims": [
+            {
+              "text": "security team will not approve TeamFlow for company-wide rollout",
+              "source_span": [
+                4,
+                68
+              ],
+              "quoted_text": "security team will not approve TeamFlow for company-wide rollout",
+              "claim_confidence": 0.93
+            },
+            {
+              "text": "without SSO and SCIM user provisioning",
+              "source_span": [
+                69,
+                107
+              ],
+              "quoted_text": "without SSO and SCIM user provisioning",
+              "claim_confidence": 0.93
+            }
+          ]
+        },
+        "reached_via": [
+          "direct_evidence",
+          "feature:feat-sso"
+        ]
+      },
+      {
+        "id": "sig-04",
+        "source_type": "support",
+        "source_ref": null,
+        "raw_text": "Admins send 12 to 15 tickets a week asking for directory sync and bulk user provisioning.",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "analysis": {
+          "intent": "Reduce manual user-management load via directory sync",
+          "stakeholder_type": "support",
+          "urgency": 3,
+          "sentiment": -0.1,
+          "confidence": {
+            "score": 0.86,
+            "basis": "strong",
+            "components": {
+              "span_grounding_ratio": 1.0
+            }
+          },
+          "claims": [
+            {
+              "text": "12 to 15 tickets a week asking for directory sync",
+              "source_span": [
+                12,
+                61
+              ],
+              "quoted_text": "12 to 15 tickets a week asking for directory sync",
+              "claim_confidence": 0.93
+            },
+            {
+              "text": "bulk user provisioning",
+              "source_span": [
+                66,
+                88
+              ],
+              "quoted_text": "bulk user provisioning",
+              "claim_confidence": 0.93
+            }
+          ]
+        },
+        "reached_via": [
+          "direct_evidence",
+          "feature:feat-sso"
+        ]
+      },
+      {
+        "id": "sig-06",
+        "source_type": "engineering",
+        "source_ref": null,
+        "raw_text": "We already committed to shipping mobile offline mode this quarter, and the team cannot deliver both SSO and offline well at once.",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "analysis": {
+          "intent": "Surface the capacity conflict between SSO and mobile offline",
+          "stakeholder_type": "engineering",
+          "urgency": 3,
+          "sentiment": -0.2,
+          "confidence": {
+            "score": 0.86,
+            "basis": "strong",
+            "components": {
+              "span_grounding_ratio": 1.0
+            }
+          },
+          "claims": [
+            {
+              "text": "already committed to shipping mobile offline mode this quarter",
+              "source_span": [
+                3,
+                65
+              ],
+              "quoted_text": "already committed to shipping mobile offline mode this quarter",
+              "claim_confidence": 0.93
+            },
+            {
+              "text": "the team cannot deliver both SSO and offline well at once",
+              "source_span": [
+                71,
+                128
+              ],
+              "quoted_text": "the team cannot deliver both SSO and offline well at once",
+              "claim_confidence": 0.93
+            }
+          ]
+        },
+        "reached_via": [
+          "conflict:conf-resource"
+        ]
+      }
+    ],
+    "integrity": {
+      "complete": true,
+      "unresolved_signal_ids": [],
+      "notes": []
+    },
+    "meta": {
+      "decision_id": "dec-01",
+      "signal_count": 5,
+      "conflict_count": 2
+    }
+  },
+  "invalid_example": {
+    "label": "Rejected: a decision that ignores a known conflict over its subject",
+    "model_output": {
+      "decision_id": "d-invalid",
+      "subject_type": "feature",
+      "subject_id": "feat-sso",
+      "recommendation": "build_now",
+      "title": "Build Enterprise SSO now",
+      "rationale": "Sales says the Acme deal is blocked, so we should just build SSO immediately.",
+      "priority_rank": 1,
+      "acknowledged_conflict_ids": [],
+      "evidence_signal_ids": [
+        "sig-01"
+      ],
+      "framework_citation_ids": [],
+      "confidence": {
+        "score": 0.8,
+        "components": {},
+        "basis": "strong"
+      }
+    },
+    "validation": {
+      "ok": false,
+      "retry_feedback": "Your previous tool output was rejected. Fix every issue below and call the tool again with corrected input:\n1. [decision.unacknowledged_conflict] (field: decisions.0.acknowledged_conflict_ids) decision #0 ignores conflict conf-resource which was detected over its subject feature. Hint: Use only the provided feature_ids as subjects and signal_ids as evidence; decide each feature at most once; acknowledge every conflict_id whose subject_id matches the feature you are deciding, and acknowledge no others.\n2. [decision.unacknowledged_conflict] (field: decisions.0.acknowledged_conflict_ids) decision #0 ignores conflict conf-risk which was detected over its subject feature. Hint: Use only the provided feature_ids as subjects and signal_ids as evidence; decide each feature at most once; acknowledge every conflict_id whose subject_id matches the feature you are deciding, and acknowledge no others.",
+      "issues": [
+        {
+          "code": "decision.unacknowledged_conflict",
+          "message": "decision #0 ignores conflict conf-resource which was detected over its subject feature",
+          "field": "decisions.0.acknowledged_conflict_ids",
+          "hint": "Use only the provided feature_ids as subjects and signal_ids as evidence; decide each feature at most once; acknowledge every conflict_id whose subject_id matches the feature you are deciding, and acknowledge no others."
+        },
+        {
+          "code": "decision.unacknowledged_conflict",
+          "message": "decision #0 ignores conflict conf-risk which was detected over its subject feature",
+          "field": "decisions.0.acknowledged_conflict_ids",
+          "hint": "Use only the provided feature_ids as subjects and signal_ids as evidence; decide each feature at most once; acknowledge every conflict_id whose subject_id matches the feature you are deciding, and acknowledge no others."
+        }
+      ]
+    }
+  }
+}
