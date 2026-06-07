@@ -17,7 +17,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
 import app.models  # noqa: F401  -- register tables on Base.metadata
-from app.ai_contracts.enums import FrameworkName
+from app.ai_contracts.enums import EvidenceType, FrameworkName, Relationship
 from app.db.base import Base
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +52,7 @@ _ALL_TABLES = (
     "decision_conflict",
     "knowledge_source",
     "knowledge_chunk",
+    "decision_framework_citation",
 )
 
 
@@ -158,6 +159,26 @@ def test_migration_creates_knowledge_chunk_indexes(sqlite_url: str) -> None:
     engine.dispose()
 
 
+def test_migration_creates_framework_citation_reverse_index(sqlite_url: str) -> None:
+    """The ix_decision_framework_citation_chunk_id reverse-lookup index is created."""
+
+    command.upgrade(_alembic_config(sqlite_url), "head")
+    engine = create_engine(sqlite_url, future=True)
+    index_names = {idx["name"] for idx in inspect(engine).get_indexes("decision_framework_citation")}
+    assert "ix_decision_framework_citation_chunk_id" in index_names
+    engine.dispose()
+
+
+def test_migration_0007_enum_labels_match_python_enums() -> None:
+    """The 0007 provenance enums equal Relationship / EvidenceType values verbatim."""
+
+    module = _load_revision_module("0007_create_decision_framework_citation.py")
+    assert set(module._decision_framework_relationship.enums) == {m.value for m in Relationship}
+    assert set(module._decision_framework_evidence_type.enums) == {m.value for m in EvidenceType}
+    assert "grounds" in {m.value for m in Relationship}
+    assert "framework_citation" in {m.value for m in EvidenceType}
+
+
 def test_migration_0006_framework_enum_labels_match_python_enum() -> None:
     """HIGH guard: the 0006 framework-enum labels equal FrameworkName.value verbatim.
 
@@ -187,4 +208,5 @@ def test_downgrade_removes_tables(sqlite_url: str) -> None:
     assert "decision" not in tables
     assert "knowledge_source" not in tables
     assert "knowledge_chunk" not in tables
+    assert "decision_framework_citation" not in tables
     engine.dispose()

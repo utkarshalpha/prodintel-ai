@@ -1,7 +1,12 @@
 """ORM models. Importing this package registers every table on ``Base.metadata``."""
 
 from app.models.conflict import Conflict, ConflictParty
-from app.models.decision import Decision, DecisionConflict, DecisionEvidence
+from app.models.decision import (
+    Decision,
+    DecisionConflict,
+    DecisionEvidence,
+    DecisionFrameworkCitation,
+)
 from app.models.feature import Feature, FeatureSignal
 from app.models.knowledge import (
     KnowledgeChunk,
@@ -22,6 +27,7 @@ __all__ = [
     "Decision",
     "DecisionEvidence",
     "DecisionConflict",
+    "DecisionFrameworkCitation",
     "KnowledgeSource",
     "KnowledgeChunk",
     "KnowledgeSourceImmutableError",

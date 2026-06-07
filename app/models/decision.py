@@ -44,11 +44,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.ai_contracts.enums import DecisionRecommendation, DecisionStatus, SubjectType
+from app.ai_contracts.enums import (
+    DecisionRecommendation,
+    DecisionStatus,
+    EvidenceType,
+    Relationship,
+    SubjectType,
+)
 from app.ai_contracts.stage4_decision import DecisionContract
 from app.db.base import Base
 
-__all__ = ["Decision", "DecisionEvidence", "DecisionConflict"]
+__all__ = ["Decision", "DecisionEvidence", "DecisionConflict", "DecisionFrameworkCitation"]
 
 
 def _utcnow() -> datetime:
@@ -95,6 +101,10 @@ class Decision(Base):
         cascade="all, delete-orphan",
     )
     acknowledged_conflicts: Mapped[list["DecisionConflict"]] = relationship(
+        back_populates="decision",
+        cascade="all, delete-orphan",
+    )
+    framework_citations: Mapped[list["DecisionFrameworkCitation"]] = relationship(
         back_populates="decision",
         cascade="all, delete-orphan",
     )
@@ -184,3 +194,50 @@ class DecisionConflict(Base):
     created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
 
     decision: Mapped[Decision] = relationship(back_populates="acknowledged_conflicts")
+
+
+class DecisionFrameworkCitation(Base):
+    """Provenance edge: a decision GROUNDS its recommendation on a framework chunk.
+
+    ``ON DELETE CASCADE`` from the decision side and ``ON DELETE RESTRICT`` toward the
+    knowledge chunk, so a framework passage a decision grounds on cannot be deleted
+    while the decision references it -- the same deletion protection ``decision_evidence``
+    gives signals (evidence traceability is a data-model invariant, ADR-011), extended
+    to the RAG corpus.
+
+    The edge carries the reserved provenance typing -- ``relationship_type`` defaults to
+    :attr:`Relationship.GROUNDS` and ``evidence_type`` to
+    :attr:`EvidenceType.FRAMEWORK_CITATION` -- so the provenance graph is uniformly
+    queryable by edge kind, plus ``retrieval_score``, the retrieval similarity at
+    decision time. The enum *type names* are distinct (``decision_framework_relationship``,
+    ``decision_framework_evidence_type``) so they do not collide with the ``relationship``
+    enum created for ``feature_signal``.
+    """
+
+    __tablename__ = "decision_framework_citation"
+    __table_args__ = (Index("ix_decision_framework_citation_chunk_id", "chunk_id"),)
+
+    decision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("decision.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    chunk_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("knowledge_chunk.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    relationship_type: Mapped[Relationship] = mapped_column(
+        _value_enum(Relationship, "decision_framework_relationship"),
+        nullable=False,
+        default=Relationship.GROUNDS,
+    )
+    evidence_type: Mapped[EvidenceType] = mapped_column(
+        _value_enum(EvidenceType, "decision_framework_evidence_type"),
+        nullable=False,
+        default=EvidenceType.FRAMEWORK_CITATION,
+    )
+    retrieval_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
+
+    decision: Mapped[Decision] = relationship(back_populates="framework_citations")
