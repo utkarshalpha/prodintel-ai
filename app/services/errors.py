@@ -21,6 +21,10 @@ __all__ = [
     "ConflictDetectionFailedError",
     "DecisionNotFoundError",
     "DecisionSynthesisFailedError",
+    "KnowledgeSourceNotFoundError",
+    "CorpusEmbeddingModelMismatchError",
+    "ChunkOrdinalError",
+    "KnowledgeIngestionFailedError",
 ]
 
 
@@ -117,3 +121,50 @@ class DecisionSynthesisFailedError(SignalServiceError):
         self.stage_result = stage_result
         reason = stage_result.error.message if stage_result.error else "unknown"
         super().__init__(f"decision synthesis failed: {reason}")
+
+
+class KnowledgeSourceNotFoundError(SignalServiceError):
+    """The requested knowledge source does not exist (maps to HTTP 404)."""
+
+    def __init__(self, source_id: uuid.UUID) -> None:
+        self.source_id = source_id
+        super().__init__(f"knowledge source {source_id} not found")
+
+
+class CorpusEmbeddingModelMismatchError(SignalServiceError):
+    """The embedding model does not agree with the corpus_version's pinned model.
+
+    Raised when (a) the contract's declared ``embedding_model_id`` does not match the
+    wired embedding client, or (b) a ``corpus_version`` already ingested under model A
+    is being ingested with model B. A corpus snapshot is single-model by invariant;
+    switching models requires a new ``corpus_version``. Maps to HTTP 409.
+    """
+
+    def __init__(self, corpus_version: str, expected: str, actual: str) -> None:
+        self.corpus_version = corpus_version
+        self.expected = expected
+        self.actual = actual
+        super().__init__(
+            f"embedding model mismatch for corpus_version {corpus_version!r}: "
+            f"expected {expected!r}, got {actual!r}"
+        )
+
+
+class ChunkOrdinalError(SignalServiceError):
+    """The source's chunk ordinals are not a contiguous 0-based sequence (HTTP 422)."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class KnowledgeIngestionFailedError(SignalServiceError):
+    """Embedding or vector-index upsert failed during ingestion (maps to HTTP 502).
+
+    The system-of-record rows are committed (``chroma_id`` NULL), so the operation is
+    resumable via a re-``ingest`` or ``reembed_pending``. Carries the underlying
+    vector-layer error as ``__cause__`` for a precise reason.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"knowledge ingestion failed: {reason}")
