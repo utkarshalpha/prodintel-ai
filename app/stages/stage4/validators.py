@@ -29,6 +29,7 @@ DECISION_ISSUE_CODES = {
     "unknown_conflict": "decision.unknown_conflict",
     "conflict_subject_mismatch": "decision.conflict_subject_mismatch",
     "unacknowledged_conflict": "decision.unacknowledged_conflict",
+    "unknown_framework_citation": "decision.unknown_framework_citation",
 }
 
 _HINT = (
@@ -37,10 +38,21 @@ _HINT = (
     "the feature you are deciding, and acknowledge no others."
 )
 
+_FRAMEWORK_HINT = (
+    "framework_citation_ids must be a subset of the framework chunk_ids provided in the "
+    "prompt; cite only the framework passages that were retrieved, or cite none."
+)
+
 
 @runtime_checkable
 class SupportsDecisionInputs(Protocol):
-    """Structural type for a context exposing the input feature/signal/conflict sets."""
+    """Structural type for a context exposing the input feature/signal/conflict sets.
+
+    ``input_framework_chunk_ids`` carries the injected framework-retrieval pool (the
+    valid framework-citation targets). It is read defensively (defaulting to empty) so a
+    context that predates framework grounding -- or any legacy test double -- behaves
+    exactly like the framework-free Stage 4.
+    """
 
     @property
     def input_feature_ids(self) -> Sequence[UUID]: ...
@@ -50,6 +62,9 @@ class SupportsDecisionInputs(Protocol):
 
     @property
     def conflict_subjects(self) -> Mapping[UUID, UUID]: ...
+
+    @property
+    def input_framework_chunk_ids(self) -> Sequence[UUID]: ...
 
 
 class DecisionIntegrityValidator:
@@ -65,6 +80,9 @@ class DecisionIntegrityValidator:
             context.input_feature_ids,
             context.input_signal_ids,
             context.conflict_subjects,
+            # Read defensively: a legacy context without a framework pool grounds on
+            # nothing, so the framework rule is inert (empty pool == current Stage 4).
+            getattr(context, "input_framework_chunk_ids", ()),
         )
         if report.passed:
             return ValidationResult.success()
@@ -119,9 +137,18 @@ class DecisionIntegrityValidator:
                     field=f"decisions.{index}.acknowledged_conflict_ids",
                 )
             )
+        for index, chunk_id in report.unknown_framework_citations:
+            issues.append(
+                _error(
+                    DECISION_ISSUE_CODES["unknown_framework_citation"],
+                    f"decision #{index} cites framework chunk {chunk_id} which was not in the retrieved framework pool",
+                    field=f"decisions.{index}.framework_citation_ids",
+                    hint=_FRAMEWORK_HINT,
+                )
+            )
 
         return ValidationResult.failure(issues)
 
 
-def _error(code: str, message: str, *, field: str | None = None) -> ValidationIssue:
-    return ValidationIssue(code=code, message=message, field=field, severity=Severity.ERROR, hint=_HINT)
+def _error(code: str, message: str, *, field: str | None = None, hint: str = _HINT) -> ValidationIssue:
+    return ValidationIssue(code=code, message=message, field=field, severity=Severity.ERROR, hint=hint)

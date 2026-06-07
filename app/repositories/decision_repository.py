@@ -14,7 +14,7 @@ from collections.abc import Iterable, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.decision import Decision
+from app.models.decision import Decision, DecisionFrameworkCitation
 
 __all__ = ["DecisionRepository"]
 
@@ -37,10 +37,23 @@ class DecisionRepository:
         decision: Decision,
         signal_ids: Iterable[uuid.UUID],
         conflict_ids: Iterable[uuid.UUID],
+        framework_citations: Iterable[tuple[uuid.UUID, float | None]] = (),
     ) -> Decision:
-        """Insert a decision and its evidence + acknowledged-conflict edges."""
+        """Insert a decision and its evidence, acknowledged-conflict, and framework edges.
+
+        ``framework_citations`` is an iterable of ``(chunk_id, retrieval_score)`` pairs the
+        caller has already deduplicated and resolved against the frozen framework pool (the
+        service owns that source of truth). Each becomes a :class:`DecisionFrameworkCitation`
+        grounding edge; ``relationship_type`` / ``evidence_type`` take their model defaults
+        (``GROUNDS`` / ``FRAMEWORK_CITATION``). Omitting the argument leaves the prior
+        evidence/conflict behavior unchanged.
+        """
 
         decision.attach_links(signal_ids, conflict_ids)
+        for chunk_id, retrieval_score in framework_citations:
+            decision.framework_citations.append(
+                DecisionFrameworkCitation(chunk_id=chunk_id, retrieval_score=retrieval_score)
+            )
         self._session.add(decision)
         self._session.flush()
         return decision

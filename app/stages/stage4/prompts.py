@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Sequence
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 __all__ = [
     "STAGE4_PROMPT_VERSION",
@@ -14,6 +14,7 @@ __all__ = [
     "FeatureForDecision",
     "SignalForDecision",
     "ConflictForDecision",
+    "FrameworkPassage",
     "build_system_prompt",
     "build_user_prompt",
 ]
@@ -61,6 +62,30 @@ class ConflictForDecision(BaseModel):
     summary: str
 
 
+class FrameworkPassage(BaseModel):
+    """Immutable view of a retrieved framework-knowledge chunk the decision may ground on.
+
+    ``chunk_id`` is the persisted :class:`~app.models.knowledge.KnowledgeChunk` id -- the
+    exact value a decision lists in ``framework_citation_ids`` and the integrity gate
+    checks every cited id against. ``retrieval_score`` is the similarity retained for this
+    chunk by the pool dedupe (the maximum across the features that surfaced it).
+
+    This object is the *single source of truth* for the framework pool: the service builds
+    it once from the frozen retrieval pool, and the prompt, the validator, and persistence
+    consume the same instances unchanged. It is therefore frozen so no consumer can mutate
+    the shared pool. ``framework`` is optional because a chunk from a non-framework source
+    (e.g. a book) carries no framework attribution.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    chunk_id: UUID
+    content: str
+    framework: str | None = None
+    source_title: str
+    retrieval_score: float
+
+
 def build_system_prompt() -> str:
     """Static instructions for the decision-synthesis stage."""
 
@@ -92,11 +117,16 @@ def build_user_prompt(
     features: Sequence[FeatureForDecision],
     signals: Sequence[SignalForDecision],
     conflicts: Sequence[ConflictForDecision],
+    framework_knowledge: Sequence[FrameworkPassage] = (),
 ) -> str:
-    """Render the features (subjects), signals (evidence), and conflicts (to address).
+    """Render the features (subjects), signals (evidence), conflicts (to address), and
+    -- when a framework pool is injected -- the retrieved framework passages.
 
-    Each row carries an explicit ``feature_id:`` / ``signal_id:`` / ``conflict_id:``
-    line so the model and the integrity validator share unambiguous identifiers.
+    Each row carries an explicit ``feature_id:`` / ``signal_id:`` / ``conflict_id:`` /
+    ``chunk_id:`` line so the model and the integrity validator share unambiguous
+    identifiers. ``framework_knowledge`` is rendered in the order given (the service
+    supplies a deterministically ordered, frozen pool); when it is empty the prompt is
+    byte-identical to the framework-free Stage 4 prompt, so the legacy path is unchanged.
     """
 
     feature_blocks = "\n".join(
@@ -124,7 +154,7 @@ def build_user_prompt(
     else:
         conflict_blocks = "(none detected)"
 
-    return (
+    prompt = (
         "Synthesize evidence-backed decisions over the following features. Cite only "
         "the signal_ids listed, use only these feature_ids as subjects, and "
         "acknowledge every conflict_id whose subject_id matches the feature you are "
@@ -133,3 +163,23 @@ def build_user_prompt(
         f"Stakeholder signals:\n" + "\n".join(signal_blocks) + "\n\n"
         f"Detected conflicts:\n{conflict_blocks}"
     )
+
+    if framework_knowledge:
+        framework_blocks = "\n".join(
+            f"[K{position}] chunk_id: {passage.chunk_id} "
+            f"| framework: {passage.framework or '(unspecified)'} "
+            f"| source: {passage.source_title} | score: {passage.retrieval_score:.4f}\n"
+            f"    {passage.content}"
+            for position, passage in enumerate(framework_knowledge, start=1)
+        )
+        prompt += (
+            "\n\n"
+            "Framework knowledge (you MAY ground your decisions on these passages):\n"
+            f"{framework_blocks}\n\n"
+            "If a decision draws on this framework knowledge, list the supporting chunk_id(s) "
+            "in framework_citation_ids. Every id in framework_citation_ids MUST be one of the "
+            "chunk_ids listed above -- never cite a framework passage that is not listed, and "
+            "cite none if you grounded on no framework."
+        )
+
+    return prompt

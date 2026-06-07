@@ -20,7 +20,12 @@ from app.ai_runtime.interfaces import LLMToolResponse, StageContext
 from app.ai_runtime.retry_policy import RetryPolicy
 from app.stages._harness_metadata import HarnessManagedMetadataRunner
 from app.stages.stage4 import prompts
-from app.stages.stage4.prompts import ConflictForDecision, FeatureForDecision, SignalForDecision
+from app.stages.stage4.prompts import (
+    ConflictForDecision,
+    FeatureForDecision,
+    FrameworkPassage,
+    SignalForDecision,
+)
 from app.stages.stage4.validators import DecisionIntegrityValidator
 
 __all__ = ["Stage4Context", "Stage4DecisionRunner", "build_stage4_runner"]
@@ -34,6 +39,14 @@ class Stage4Context(StageContext):
     conflicts: list[ConflictForDecision] = Field(
         default_factory=list,
         description="Conflicts already detected over the features (possibly none).",
+    )
+    framework_knowledge: list[FrameworkPassage] = Field(
+        default_factory=list,
+        description=(
+            "Retrieved framework passages the decision may ground on (possibly none). The "
+            "single frozen pool shared by the prompt, the integrity validator, and "
+            "persistence; empty when not grounding on a corpus."
+        ),
     )
     workspace_id: UUID | None = Field(default=None, description="Optional workspace scope (reserved).")
     stage_name: str = Field(default="stage4")
@@ -55,6 +68,17 @@ class Stage4Context(StageContext):
         """Map each input conflict id to the feature id it is about."""
 
         return {conflict.conflict_id: conflict.subject_id for conflict in self.conflicts}
+
+    @property
+    def input_framework_chunk_ids(self) -> list[UUID]:
+        """Valid framework-citation targets: the chunk ids in the injected pool.
+
+        Order mirrors ``framework_knowledge`` (deterministic, as supplied by the
+        service); empty when no framework pool was injected, so the integrity gate's
+        framework rule is inert on the legacy path.
+        """
+
+        return [passage.chunk_id for passage in self.framework_knowledge]
 
 
 class Stage4DecisionRunner(HarnessManagedMetadataRunner, BaseStageRunner[DecisionSynthesisContract, Stage4Context]):
@@ -103,7 +127,12 @@ class Stage4DecisionRunner(HarnessManagedMetadataRunner, BaseStageRunner[Decisio
         return prompts.build_system_prompt()
 
     def build_user_prompt(self, context: Stage4Context) -> str:
-        return prompts.build_user_prompt(context.features, context.signals, context.conflicts)
+        return prompts.build_user_prompt(
+            context.features,
+            context.signals,
+            context.conflicts,
+            context.framework_knowledge,
+        )
 
     # ----------------------------------------------------------- semantic gates
     def semantic_validators(self) -> Sequence[DecisionIntegrityValidator]:
