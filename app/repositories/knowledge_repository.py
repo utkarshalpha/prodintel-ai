@@ -158,6 +158,27 @@ class KnowledgeChunkRepository:
         )
         return self._session.scalar(stmt)
 
+    def get_many_with_source(self, chunk_ids: Iterable[uuid.UUID]) -> Sequence[KnowledgeChunk]:
+        """Batch-fetch chunks with their source eagerly loaded (retrieval, Phase 6D).
+
+        One ``IN`` query with ``selectinload(source)`` -- no N+1 over the chunk ids a
+        vector query returned. Deterministically ordered by ``id``; duplicate ids
+        collapse to one row and unknown ids are simply absent. The caller
+        (RetrievalService) re-orders the rows to match the vector ranking. Empty input
+        returns an empty list.
+        """
+
+        ids = list(chunk_ids)
+        if not ids:
+            return []
+        stmt = (
+            select(KnowledgeChunk)
+            .where(KnowledgeChunk.id.in_(ids))
+            .options(selectinload(KnowledgeChunk.source))
+            .order_by(KnowledgeChunk.id)
+        )
+        return list(self._session.scalars(stmt).unique())
+
     def list_for_source(self, source_id: uuid.UUID) -> Sequence[KnowledgeChunk]:
         """All chunks for a source, ordinal-ordered."""
 

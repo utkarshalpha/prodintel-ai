@@ -25,6 +25,7 @@ __all__ = [
     "CorpusEmbeddingModelMismatchError",
     "ChunkOrdinalError",
     "KnowledgeIngestionFailedError",
+    "RetrievalFailedError",
 ]
 
 
@@ -168,3 +169,15 @@ class KnowledgeIngestionFailedError(SignalServiceError):
     def __init__(self, reason: str) -> None:
         self.reason = reason
         super().__init__(f"knowledge ingestion failed: {reason}")
+
+
+class RetrievalFailedError(SignalServiceError):
+    """Query embedding or vector query failed during retrieval (maps to HTTP 502).
+
+    Retrieval is read-only, so nothing is persisted; the operation can simply be
+    retried. Carries the underlying vector-layer error as ``__cause__``.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"retrieval failed: {reason}")

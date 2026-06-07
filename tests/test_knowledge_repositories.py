@@ -260,3 +260,82 @@ def test_cascade_persistence_through_create_with_chunks(session) -> None:
     # Reachable via the chunk repo too, ordinal-ordered.
     by_source = chunk_repo.list_for_source(source_id)
     assert [c.ordinal for c in by_source] == [0, 1, 2]
+
+
+# ------------------------------------------- get_many_with_source (Phase 6D-ii)
+def test_get_many_with_source_empty_input(session) -> None:
+    assert KnowledgeChunkRepository(session).get_many_with_source([]) == []
+
+
+def test_get_many_with_source_returns_all_requested(session) -> None:
+    repo = KnowledgeSourceRepository(session)
+    chunk_repo = KnowledgeChunkRepository(session)
+    source = _source(content_hash="a" * 64)
+    repo.create_with_chunks(source, [_chunk(source, 0), _chunk(source, 1), _chunk(source, 2)])
+    ids = [chunk.id for chunk in source.chunks]
+    session.commit()
+    session.expunge_all()
+
+    result = chunk_repo.get_many_with_source(ids)
+    assert {chunk.id for chunk in result} == set(ids)
+    assert len(result) == 3
+
+
+def test_get_many_with_source_eager_loads_source_no_extra_sql(session) -> None:
+    repo = KnowledgeSourceRepository(session)
+    chunk_repo = KnowledgeChunkRepository(session)
+    source = _source(content_hash="b" * 64)
+    repo.create_with_chunks(source, [_chunk(source, 0)])
+    chunk_id = source.chunks[0].id
+    source_id = source.id
+    session.commit()
+    session.expunge_all()
+
+    chunk = chunk_repo.get_many_with_source([chunk_id])[0]
+    assert "source" not in sa_inspect(chunk).unloaded  # eagerly loaded
+    with count_statements(session) as counter:
+        assert chunk.source.id == source_id
+        assert chunk.source.title  # touch additional source columns
+    assert counter["n"] == 0, "accessing the eagerly-loaded source must issue no SQL"
+
+
+def test_get_many_with_source_ignores_missing_ids(session) -> None:
+    repo = KnowledgeSourceRepository(session)
+    chunk_repo = KnowledgeChunkRepository(session)
+    source = _source(content_hash="c" * 64)
+    repo.create_with_chunks(source, [_chunk(source, 0), _chunk(source, 1)])
+    ids = [chunk.id for chunk in source.chunks]
+    session.commit()
+    session.expunge_all()
+
+    result = chunk_repo.get_many_with_source(ids + [uuid.uuid4()])
+    assert {chunk.id for chunk in result} == set(ids)
+    assert len(result) == 2
+
+
+def test_get_many_with_source_dedups_duplicate_ids(session) -> None:
+    repo = KnowledgeSourceRepository(session)
+    chunk_repo = KnowledgeChunkRepository(session)
+    source = _source(content_hash="f" * 64)
+    repo.create_with_chunks(source, [_chunk(source, 0)])
+    chunk_id = source.chunks[0].id
+    session.commit()
+    session.expunge_all()
+
+    result = chunk_repo.get_many_with_source([chunk_id, chunk_id, chunk_id])
+    assert len(result) == 1 and result[0].id == chunk_id
+
+
+def test_get_many_with_source_ordered_by_id(session) -> None:
+    repo = KnowledgeSourceRepository(session)
+    chunk_repo = KnowledgeChunkRepository(session)
+    source = _source(content_hash="e" * 64)
+    repo.create_with_chunks(source, [_chunk(source, i) for i in range(5)])
+    ids = [chunk.id for chunk in source.chunks]
+    session.commit()
+    session.expunge_all()
+
+    # Request in a scrambled order; the repo returns a deterministic id order.
+    scrambled = [ids[3], ids[0], ids[4], ids[1], ids[2]]
+    returned_ids = [chunk.id for chunk in chunk_repo.get_many_with_source(scrambled)]
+    assert returned_ids == sorted(returned_ids)
