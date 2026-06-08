@@ -17,6 +17,8 @@ __all__ = [
     "render_conflicts",
     "render_decision",
     "render_why",
+    "STEPS",
+    "RENDERERS",
 ]
 
 _STAKE = {
@@ -282,3 +284,27 @@ def render_why(snapshot: dict) -> None:
     else:
         st.error("Provenance integrity: incomplete — unresolved: "
                  + ", ".join(integrity.get("unresolved_signal_ids", [])))
+
+
+# --------------------------------------------------------------------------- #
+# The six-step walkthrough -- single source of truth, shared by Showcase mode
+# (app.py) and Live Analysis mode (showcase/live/view.py). Defined here, after
+# the renderers, so both consumers import the same step list + dispatch.
+# --------------------------------------------------------------------------- #
+STEPS = [
+    {"key": "signals", "label": "① Signals", "blurb": "The conflicting stakeholder inputs"},
+    {"key": "analysis", "label": "② Analysis", "blurb": "Claims anchored to the source text"},
+    {"key": "features", "label": "③ Features", "blurb": "Signals clustered into product features"},
+    {"key": "conflicts", "label": "④ Conflicts", "blurb": "Genuine stakeholder disagreement, surfaced"},
+    {"key": "decision", "label": "⑤ Decision", "blurb": "A ranked, evidence-backed recommendation"},
+    {"key": "why", "label": "⑥ Why", "blurb": "Full provenance back to the original quote"},
+]
+
+RENDERERS = {
+    "signals": render_signals,
+    "analysis": render_analysis,
+    "features": render_features,
+    "conflicts": render_conflicts,
+    "decision": render_decision,
+    "why": render_why,
+}

@@ -1,0 +1,7 @@
+stakeholder,feedback
+sales,We urgently need SSO single sign-on to close the enterprise Acme deal this quarter.
+engineering,SSO is risky and complex; it requires six weeks of effort and a brittle auth rewrite.
+leadership,SSO is a critical strategic priority for moving upmarket into larger accounts.
+customer,Please add dark mode; our users love it and it would add great value for night reading.
+support,Dark mode is hard to maintain and could break accessibility; it feels fragile to ship.
+sales,Dark mode keeps coming up on sales calls as an important differentiator for night users.
