@@ -42,14 +42,10 @@ from app.db.base import Base  # noqa: E402
 from app.models.knowledge import KnowledgeChunk, KnowledgeSource  # noqa: E402
 from app.repositories.conflict_repository import ConflictRepository  # noqa: E402
 from app.repositories.decision_repository import DecisionRepository  # noqa: E402
-from app.repositories.feature_repository import FeatureRepository, FeatureSignalRepository  # noqa: E402
-from app.repositories.parsed_signal_repository import ParsedSignalRepository  # noqa: E402
+from app.repositories.feature_repository import FeatureRepository  # noqa: E402
 from app.repositories.signal_repository import SignalRepository  # noqa: E402
-from app.services.conflict_service import ConflictService  # noqa: E402
 from app.services.decision_explanation_service import DecisionExplanationService  # noqa: E402
-from app.services.decision_service import DecisionService  # noqa: E402
-from app.services.feature_service import FeatureService  # noqa: E402
-from app.services.signal_service import SignalService  # noqa: E402
+from app.services.pipeline_service import FeedbackEntry, PipelineService  # noqa: E402
 from app.stages.stage1.runner import build_stage1_runner  # noqa: E402
 from app.stages.stage1 import prompts as s1p  # noqa: E402
 from app.stages.stage2.runner import build_stage2_runner  # noqa: E402
@@ -60,6 +56,7 @@ from app.stages.stage4.runner import Stage4Context, build_stage4_runner  # noqa:
 from app.stages.stage4 import prompts as s4p  # noqa: E402
 from app.stages.stage4.prompts import ConflictForDecision, FeatureForDecision, SignalForDecision  # noqa: E402
 from app.stages.stage4.validators import DecisionIntegrityValidator  # noqa: E402
+from showcase.lib.assemble import assemble_snapshot  # noqa: E402
 
 CORPUS = "pm-corpus-v1"
 _FIXED_TS = "2026-01-01T00:00:00+00:00"
@@ -312,58 +309,8 @@ def _make_session() -> Session:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, class_=Session)()
 
 
-# --------------------------------------------------------------------------- #
-# Serialization helpers
-# --------------------------------------------------------------------------- #
-def _conf(d: dict) -> dict:
-    return {"score": d.get("score"), "basis": d.get("basis"), "components": d.get("components", {})}
-
-
-def _claims(parsed, raw_text: str) -> list[dict]:
-    out = []
-    for c in parsed.extracted_claims:
-        start, end = c["source_span"]
-        out.append({"text": c["text"], "source_span": [start, end],
-                    "quoted_text": raw_text[start:end], "claim_confidence": c["claim_confidence"]})
-    return out
-
-
 def build_snapshot() -> dict:
     session = _make_session()
-    sig_repo = SignalRepository(session)
-    parsed_repo = ParsedSignalRepository(session)
-
-    signals = SignalService(session, sig_repo, parsed_repo, build_stage1_runner(ScenarioStage1Client()))
-    features = FeatureService(session, FeatureRepository(session), FeatureSignalRepository(session),
-                              parsed_repo, sig_repo, build_stage2_runner(ScenarioStage2Client()))
-    conflicts = ConflictService(session, ConflictRepository(session), FeatureRepository(session),
-                                parsed_repo, build_stage3_runner(ScenarioStage3Client()))
-
-    # ---- Stage 1: create + analyze the six signals (in role order). ---------
-    id_map: dict[str, str] = {}
-    signal_rows = {}
-    for spec in SIGNALS:
-        row = signals.create_signal(source_type=spec["source_type"], raw_text=spec["raw"]).signal
-        signals.analyze_signal(row.id)
-        id_map[str(row.id)] = spec["role"]
-        signal_rows[spec["role"]] = row
-
-    # ---- Stage 2: extract features (SSO first so it is feature_ids[0]). ------
-    ordered_ids = [signal_rows[r].id for r in ("sig-01", "sig-02", "sig-03", "sig-04", "sig-05", "sig-06")]
-    feat_result = features.extract_features(ordered_ids)
-    feat_by_title = {f.title: f for f in feat_result.features}
-    feat_sso = feat_by_title["Enterprise SSO & SCIM Provisioning"]
-    feat_offline = feat_by_title["Mobile Offline Mode"]
-    id_map[str(feat_sso.id)] = "feat-sso"
-    id_map[str(feat_offline.id)] = "feat-offline"
-
-    # ---- Stage 3: detect conflicts over both features (both land on SSO). ----
-    conf_result = conflicts.detect_conflicts([feat_sso.id, feat_offline.id])
-    conf_by_type = {c.conflict_type.value: c for c in conf_result.conflicts}
-    conf_risk = conf_by_type["risk"]
-    conf_resource = conf_by_type["resource"]
-    id_map[str(conf_risk.id)] = "conf-risk"
-    id_map[str(conf_resource.id)] = "conf-resource"
 
     # ---- Seed the framework corpus (RICE + Kano) so citations have real FKs. -
     src_rice = KnowledgeSource(source_type=KnowledgeSourceType.FRAMEWORK, framework=FrameworkName.RICE,
@@ -386,10 +333,6 @@ def build_snapshot() -> dict:
     src_kano.chunks.append(chunk_kano)
     session.add_all([src_rice, src_kano])
     session.commit()
-    id_map[str(chunk_rice.id)] = "chunk-rice"
-    id_map[str(chunk_kano.id)] = "chunk-kano"
-    id_map[str(src_rice.id)] = "source-rice"
-    id_map[str(src_kano.id)] = "source-kano"
 
     def _cit(chunk, score, framework, title):
         return RetrievalCitation(chunk_id=chunk.id, source_id=chunk.source_id, score=score, content=chunk.content,
@@ -401,26 +344,74 @@ def build_snapshot() -> dict:
         _cit(chunk_kano, 0.79, FrameworkName.KANO, "Kano Model -- Feature Categorization"),
     ])
 
-    # ---- Stage 4: synthesize grounded decisions. -----------------------------
-    decisions_svc = DecisionService(session, DecisionRepository(session), ConflictRepository(session),
-                                    FeatureRepository(session), parsed_repo,
-                                    build_stage4_runner(ScenarioStage4Client()), retrieval_service=retrieval)
-    dec_result = decisions_svc.synthesize_decisions([feat_sso.id, feat_offline.id], corpus_version=CORPUS)
-    dec_by_subject = {d.subject_id: d for d in dec_result.decisions}
-    dec_sso = dec_by_subject[feat_sso.id]
-    dec_offline = dec_by_subject[feat_offline.id]
-    id_map[str(dec_sso.id)] = "dec-01"
-    id_map[str(dec_offline.id)] = "dec-02"
+    # ---- Run the TeamFlow scenario through the REAL coordinator (PipelineService).
+    explanation = DecisionExplanationService(DecisionRepository(session), FeatureRepository(session),
+                                             ConflictRepository(session), SignalRepository(session))
+    pipeline = PipelineService(
+        session,
+        stage1_runner=build_stage1_runner(ScenarioStage1Client()),
+        stage2_runner=build_stage2_runner(ScenarioStage2Client()),
+        stage3_runner=build_stage3_runner(ScenarioStage3Client()),
+        stage4_runner=build_stage4_runner(ScenarioStage4Client()),
+        retrieval_service=retrieval,
+        explanation_service=explanation,
+    )
+    entries = [FeedbackEntry(stakeholder_type=spec["source_type"], text=spec["raw"]) for spec in SIGNALS]
+    run = pipeline.analyze(entries, corpus_version=CORPUS)
 
-    # ---- /why for the SSO decision (real Phase-5 traversal). -----------------
-    why = DecisionExplanationService(DecisionRepository(session), FeatureRepository(session),
-                                     ConflictRepository(session), sig_repo).explain(dec_sso.id)
+    # ---- Derive the stable id -> label map from the run's entities. ----------
+    role_by_raw = {spec["raw"]: spec["role"] for spec in SIGNALS}
+    id_map: dict[str, str] = {}
+    sig_by_role: dict[str, Any] = {}
+    for s in run.signals:
+        role = role_by_raw[s.raw_text]
+        id_map[str(s.id)] = role
+        sig_by_role[role] = s
+    feat_by_title = {f.title: f for f in run.features}
+    feat_sso = feat_by_title["Enterprise SSO & SCIM Provisioning"]
+    feat_offline = feat_by_title["Mobile Offline Mode"]
+    id_map[str(feat_sso.id)] = "feat-sso"
+    id_map[str(feat_offline.id)] = "feat-offline"
+    conf_by_type = {c.conflict_type.value: c for c in run.conflicts}
+    conf_risk = conf_by_type["risk"]
+    conf_resource = conf_by_type["resource"]
+    id_map[str(conf_risk.id)] = "conf-risk"
+    id_map[str(conf_resource.id)] = "conf-resource"
+    for d in run.decisions:
+        id_map[str(d.id)] = "dec-01" if d.subject_id == feat_sso.id else "dec-02"
+    id_map[str(chunk_rice.id)] = "chunk-rice"
+    id_map[str(chunk_kano.id)] = "chunk-kano"
+    id_map[str(src_rice.id)] = "source-rice"
+    id_map[str(src_kano.id)] = "source-kano"
 
-    # ---- Invalid example: a build_now SSO decision that ignores both conflicts.
+    # ---- Build the snapshot via the single source of truth, then the demo-only bits.
+    snapshot = assemble_snapshot(
+        run,
+        scenario="TeamFlow -- B2B SaaS moving upmarket to enterprise",
+        generated_by="scripts/build_demo_snapshot.py",
+        note="Generated from a real pipeline run (real services, validation gates, provenance edges, "
+             "framework grounding, persistence, and /why). The LLM boundary is deterministically stubbed, "
+             "exactly as in the test suite; entity ids are remapped to stable role labels and timestamps "
+             "are pinned so the artifact is byte-deterministic.",
+    )
+    snapshot["invalid_example"] = _build_invalid_example(
+        feat_sso, feat_offline, conf_risk, conf_resource, sig_by_role)
+
+    session.close()
+    return _normalize(snapshot, id_map)
+
+
+def _build_invalid_example(feat_sso, feat_offline, conf_risk, conf_resource, sig_by_role) -> dict:
+    """Demo-only artifact: a build_now SSO decision that ignores both conflicts (rejected).
+
+    Generator-owned (NOT produced by assemble_snapshot): it is built straight from the real
+    decision-integrity validator to show the gate rejecting an unacknowledged-conflict decision.
+    """
+
     invalid_ctx = Stage4Context(
         features=[FeatureForDecision(feature_id=feat_sso.id, title=feat_sso.title, jtbd=feat_sso.jtbd),
                   FeatureForDecision(feature_id=feat_offline.id, title=feat_offline.title, jtbd=feat_offline.jtbd)],
-        signals=[SignalForDecision(signal_id=signal_rows[r].id, stakeholder_type=signal_rows[r].source_type.value,
+        signals=[SignalForDecision(signal_id=sig_by_role[r].id, stakeholder_type=sig_by_role[r].source_type.value,
                                    intent="(input)", claims=["(input)"]) for r in ("sig-01", "sig-02")],
         conflicts=[ConflictForDecision(conflict_id=conf_risk.id, subject_id=feat_sso.id, conflict_type="risk",
                                        severity=4, summary="Sales advocate vs Engineering risk_flag over SSO"),
@@ -431,88 +422,23 @@ def build_snapshot() -> dict:
         decision_id="d-invalid", subject_type="feature", subject_id=feat_sso.id, recommendation="build_now",
         title="Build Enterprise SSO now", priority_rank=1,
         rationale="Sales says the Acme deal is blocked, so we should just build SSO immediately.",
-        acknowledged_conflict_ids=[], evidence_signal_ids=[signal_rows["sig-01"].id],
+        acknowledged_conflict_ids=[], evidence_signal_ids=[sig_by_role["sig-01"].id],
         confidence={"score": 0.8})
     invalid_contract = DecisionSynthesisContract(
         decisions=[invalid_decision],
         model_meta=ModelMeta(model_id="claude-demo-stub", prompt_version=s4p.STAGE4_PROMPT_VERSION,
                              input_tokens=180, output_tokens=60, stop_reason="tool_use"))
     invalid_result = DecisionIntegrityValidator().validate(invalid_contract, invalid_ctx)
-
-    # ---- Assemble the snapshot (still with real UUIDs; normalized below). ----
-    raw_by_role = {s["role"]: s["raw"] for s in SIGNALS}
-    snapshot: dict[str, Any] = {
-        "meta": {
-            "scenario": "TeamFlow -- B2B SaaS moving upmarket to enterprise",
-            "schema_version": "1.0",
-            "generated_by": "scripts/build_demo_snapshot.py",
-            "note": "Generated from a real pipeline run (real services, validation gates, provenance edges, "
-                    "framework grounding, persistence, and /why). The LLM boundary is deterministically stubbed, "
-                    "exactly as in the test suite; entity ids are remapped to stable role labels and timestamps "
-                    "are pinned so the artifact is byte-deterministic.",
-        },
-        "signals": [], "analyzed_signals": [], "features": [],
-        "unassigned_signal_ids": [id_map[str(sid)] for sid in feat_result.unassigned_signal_ids],
-        "conflicts": [], "decisions": [], "framework_pool": [], "framework_citations": {},
-        "why": json.loads(why.model_dump_json()),
-        "invalid_example": {
-            "label": "Rejected: a decision that ignores a known conflict over its subject",
-            "model_output": json.loads(invalid_decision.model_dump_json()),
-            "validation": {
-                "ok": invalid_result.ok,
-                "retry_feedback": invalid_result.retry_feedback(),
-                "issues": [{"code": i.code, "message": i.message, "field": i.field, "hint": i.hint}
-                           for i in invalid_result.errors],
-            },
+    return {
+        "label": "Rejected: a decision that ignores a known conflict over its subject",
+        "model_output": json.loads(invalid_decision.model_dump_json()),
+        "validation": {
+            "ok": invalid_result.ok,
+            "retry_feedback": invalid_result.retry_feedback(),
+            "issues": [{"code": i.code, "message": i.message, "field": i.field, "hint": i.hint}
+                       for i in invalid_result.errors],
         },
     }
-
-    for role in ("sig-01", "sig-02", "sig-03", "sig-04", "sig-05", "sig-06"):
-        row = signal_rows[role]
-        parsed = signals.get_analysis(row.id)
-        snapshot["signals"].append({"id": str(row.id), "source_type": row.source_type.value,
-                                    "raw_text": row.raw_text, "source_ref": row.source_ref,
-                                    "created_at": _FIXED_TS, "content_hash": row.content_hash})
-        snapshot["analyzed_signals"].append({
-            "signal_id": str(row.id), "intent": parsed.intent, "stakeholder_type": parsed.stakeholder_type.value,
-            "urgency": parsed.urgency, "sentiment": parsed.sentiment, "confidence": _conf(parsed.confidence),
-            "claims": _claims(parsed, raw_by_role[role])})
-
-    for feat in (feat_sso, feat_offline):
-        snapshot["features"].append({
-            "id": str(feat.id), "title": feat.title, "jtbd": feat.jtbd, "description": feat.description,
-            "status": feat.status.value, "confidence": _conf(feat.confidence),
-            "source_signal_ids": [str(fs.signal_id) for fs in feat.feature_signals]})
-
-    for conf in (conf_risk, conf_resource):
-        snapshot["conflicts"].append({
-            "id": str(conf.id), "conflict_type": conf.conflict_type.value, "severity": conf.severity,
-            "status": conf.status.value, "subject_type": conf.subject_type.value, "subject_id": str(conf.subject_id),
-            "confidence": _conf(conf.confidence),
-            "parties": [{"stakeholder_type": p.stakeholder_type.value, "stance": p.stance.value,
-                         "summary": p.summary, "evidence_signal_ids": [str(s) for s in p.evidence_signal_ids]}
-                        for p in conf.parties]})
-
-    for dec in (dec_sso, dec_offline):
-        snapshot["decisions"].append({
-            "id": str(dec.id), "subject_id": str(dec.subject_id), "recommendation": dec.recommendation.value,
-            "title": dec.title, "rationale": dec.rationale, "priority_rank": dec.priority_rank,
-            "status": dec.status.value, "confidence": _conf(dec.confidence),
-            "evidence_signal_ids": [str(e.signal_id) for e in dec.evidence],
-            "acknowledged_conflict_ids": [str(a.conflict_id) for a in dec.acknowledged_conflicts],
-            "framework_citation_ids": [str(fc.chunk_id) for fc in dec.framework_citations]})
-        snapshot["framework_citations"][str(dec.id)] = [
-            {"chunk_id": str(fc.chunk_id), "retrieval_score": fc.retrieval_score,
-             "relationship_type": fc.relationship_type.value, "evidence_type": fc.evidence_type.value}
-            for fc in dec.framework_citations]
-
-    for p in dec_result.framework_pool:
-        snapshot["framework_pool"].append({
-            "chunk_id": str(p.chunk_id), "framework": p.framework, "source_title": p.source_title,
-            "content": p.content, "retrieval_score": p.retrieval_score})
-
-    session.close()
-    return _normalize(snapshot, id_map)
 
 
 def _normalize(snapshot: dict, id_map: dict[str, str]) -> dict:
