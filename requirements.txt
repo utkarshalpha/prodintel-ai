@@ -1,0 +1,29 @@
+# Runtime dependencies for the ProdIntel AI Streamlit app.
+#
+# Entry point:  streamlit run showcase/app.py
+# Target:       Streamlit Community Cloud (reads this file at the repo root).
+#
+# Derived by tracing the actual import graph of the deployed app, NOT guessed.
+# Excludes: test-only deps (pytest, httpx-as-test), the `vector` extra
+# (chromadb / sentence-transformers / torch -- Live mode runs framework-free with
+# the local engine), and migration tooling (alembic). Transitive packages
+# (pandas, numpy, pillow, plotly, starlette, httpx, greenlet, lxml, pydantic-core,
+# anyio, ...) are resolved automatically by pip from the direct deps below.
+
+# --- UI -------------------------------------------------------------------------------
+streamlit>=1.32
+
+# --- Backend pulled in at import time -------------------------------------------------
+# Live Analysis runs the real pipeline. To break the DecisionExplanationService import
+# cycle, showcase/live/runtime.py does `import app.api.app`, which transitively imports
+# the FastAPI app and the Claude client wiring -- so fastapi AND anthropic must be present
+# for the app to import, even though the deployed demo serves no HTTP and makes no Claude
+# calls (it uses the deterministic LocalHeuristicClient).
+pydantic>=2.6,<3.0
+fastapi>=0.110
+sqlalchemy>=2.0
+anthropic>=0.40
+
+# --- File ingestion (Upload mode: CSV/TXT are stdlib; PDF/DOCX need these) -------------
+pypdf>=4
+python-docx>=1.1
