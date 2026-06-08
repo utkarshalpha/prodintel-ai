@@ -8,12 +8,13 @@ from __future__ import annotations
 import streamlit as st
 
 from components.sections import render_metric_row
+from lib.meta import TEST_COUNT
 
 __all__ = ["render_hero"]
 
 _ARCH_SUMMARY = (
     "Python · FastAPI · SQLAlchemy 2.0 · Pydantic v2 · Claude (tool-use) · "
-    "ChromaDB (RAG) · Alembic · 12 ADRs · 493 tests"
+    f"ChromaDB (RAG) · Alembic · 12 ADRs · {TEST_COUNT} tests"
 )
 
 

@@ -1,7 +1,7 @@
-"""Sticky progress rail: the six pipeline steps, shown in the sidebar.
+"""Pipeline rail: the six pipeline steps shown in the sidebar as a table of contents.
 
-Lives in the sidebar so it stays visible while the main column scrolls. Scaffold only --
-no scroll-to-anchor behavior or active-step tracking yet.
+Lives in the sidebar so it stays visible while the main column scrolls. Pass ``active`` to
+highlight the current step; with no active step every entry renders with a hollow marker.
 """
 
 from __future__ import annotations

@@ -1,15 +1,15 @@
-"""Footer: the exit links and a one-line credibility strip.
-
-Scaffold only -- the demo-video and resume links are placeholders until those assets exist.
-"""
+"""Footer: recruiter-facing exit links and a one-line credibility strip."""
 
 from __future__ import annotations
 
 import streamlit as st
 
+from lib.meta import REPO_URL, TEST_COUNT
+
 __all__ = ["render_footer"]
 
-_REPO_URL = "https://github.com/utkarshalpha"
+_LINKEDIN_URL = "https://www.linkedin.com/in/utkaxh/"
+_EMAIL = "utkarsh7854@gmail.com"
 
 
 def render_footer(snapshot: dict) -> None:
@@ -17,8 +17,8 @@ def render_footer(snapshot: dict) -> None:
 
     st.divider()
     cols = st.columns(4)
-    cols[0].markdown(f"[GitHub]({_REPO_URL})")
-    cols[1].markdown(f"[README]({_REPO_URL}#readme)")
-    cols[2].markdown("Demo video — _coming soon_")
-    cols[3].markdown("Resume — _coming soon_")
-    st.caption("493 tests passing · RAG-grounded decisions · full decision provenance")
+    cols[0].markdown(f"[GitHub repo]({REPO_URL})")
+    cols[1].markdown(f"[README]({REPO_URL}#readme)")
+    cols[2].markdown(f"[LinkedIn]({_LINKEDIN_URL})")
+    cols[3].markdown(f"[Email](mailto:{_EMAIL})")
+    st.caption(f"{TEST_COUNT} tests · RAG-grounded decisions · full decision provenance")

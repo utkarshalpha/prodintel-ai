@@ -1,6 +1,6 @@
 # ProdIntel AI — Project State
 
-_Last updated: 2026-06-05_
+_Last updated: 2026-06-08_
 
 A living snapshot of the system: what it does, how it is built, what is done, and what
 remains. Companion to [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md), which
@@ -50,8 +50,8 @@ Cross-cutting: Observability (structured logging, correlation ids) app/observabi
   semantic gate before it becomes state.
 - The Anthropic SDK is isolated behind a single `ToolCallClient` protocol, so the entire
   system runs in tests with no network and no API key.
-- Vectors are designated for ChromaDB (handles reserved via `chroma_id`); the relational
-  store is the system of record.
+- Framework knowledge is retrieved from ChromaDB and cited by Stage 4 decisions; the
+  relational store remains the system of record.
 
 ---
 
@@ -78,9 +78,10 @@ silently drops — any unresolved reference. No new tables, no LLM, no writes.
 
 ## 4. Database Schema
 
-Nine tables. UUID primary keys (`sa.Uuid`, native on Postgres, `CHAR(32)` on SQLite).
+Twelve tables. UUID primary keys (`sa.Uuid`, native on Postgres, `CHAR(32)` on SQLite).
 Enums store lowercase values via `values_callable`. JSON columns hold structured AI
-output. Vectors live in ChromaDB (`chroma_id` reserved, nullable).
+output. Framework knowledge is embedded into ChromaDB and cited by decisions
+(`decision_framework_citation`); `signal.chroma_id` remains reserved for future signal-RAG.
 
 | Table | Purpose | Key columns | Constraints / indexes |
 |---|---|---|---|
@@ -93,6 +94,9 @@ output. Vectors live in ChromaDB (`chroma_id` reserved, nullable).
 | `decision` | Synthesized, evidence-backed decision over a subject | `subject_type`, `subject_id` (polymorphic), `recommendation`, `title`, `rationale`, `priority_rank`, `status`, `confidence` (JSON), `model_meta` (JSON) | PK; `ix_decision_subject_id` |
 | `decision_evidence` | Provenance edge decision↔signal | `created_at` | composite PK `(decision_id, signal_id)`; FK→decision `CASCADE`, FK→signal **`RESTRICT`**; `ix_decision_evidence_signal_id` |
 | `decision_conflict` | Edge decision↔acknowledged conflict | `created_at` | composite PK `(decision_id, conflict_id)`; FK→decision `CASCADE`, FK→conflict **`RESTRICT`**; `ix_decision_conflict_conflict_id` |
+| `knowledge_source` | A framework document in the RAG corpus (RICE, Kano, …) | `framework`, `title`, `corpus_version` | PK |
+| `knowledge_chunk` | An embedded passage of a source (vector-indexed) | `source_id`, `content`, `chroma_id` | FK→knowledge_source `CASCADE` |
+| `decision_framework_citation` | Edge decision↔cited framework chunk | `retrieval_score`, `relationship_type`, `evidence_type` | composite PK; FK→decision `CASCADE`, FK→knowledge_chunk **`RESTRICT`** |
 
 **Reserved (not yet populated):** `workspace_id` (all tables), `chroma_id` (`signal`).
 
@@ -192,26 +196,28 @@ always yields the same correction message — replayable for research.
 
 ## 9. Current Test Count
 
-**276 tests passing** (1 warning: pre-existing Starlette `TestClient`/httpx deprecation,
-unrelated to project code). Pure unit + integration; no network, no API key, deterministic.
-Run: `python -m pytest`.
+**569 tests** (565 passing + 4 environment-gated chroma-integration skips; 1 warning:
+pre-existing Starlette `TestClient`/httpx deprecation, unrelated to project code). Pure unit +
+integration; no network, no API key, deterministic. Run: `python -m pytest`.
 
 ---
 
 ## 10. Current Alembic Revision
 
-**Head: `0005_decision_and_edges`.**
+**Head: `0007_create_decision_framework_citation`.**
 
 | Revision | Adds |
 |---|---|
-| `0001_signal_parsed_signal` | `signal`, `parsed_signal` |
-| `0002_feature_feature_signal` | `feature`, `feature_signal` |
-| `0003_feature_signal_signal_id_index` | `ix_feature_signal_signal_id` |
-| `0004_conflict_conflict_party` | `conflict`, `conflict_party` (+ indexes) |
-| `0005_decision_and_edges` | `decision`, `decision_evidence`, `decision_conflict` (+ indexes) |
+| `0001_create_signal_and_parsed_signal` | `signal`, `parsed_signal` |
+| `0002_create_feature_and_feature_signal` | `feature`, `feature_signal` |
+| `0003_add_feature_signal_signal_id_index` | `ix_feature_signal_signal_id` |
+| `0004_create_conflict_and_conflict_party` | `conflict`, `conflict_party` (+ indexes) |
+| `0005_create_decision_and_provenance_edges` | `decision`, `decision_evidence`, `decision_conflict` (+ indexes) |
+| `0006_create_knowledge_source_and_chunk` | `knowledge_source`, `knowledge_chunk` (RAG corpus) |
+| `0007_create_decision_framework_citation` | `decision_framework_citation` (framework-grounding edge) |
 
 Migration↔model parity is enforced by a test comparing columns, types, nullability, PK,
-unique constraints, FKs (with `ondelete`), and indexes across all nine tables. Apply with
+unique constraints, FKs (with `ondelete`), and indexes across all twelve tables. Apply with
 `alembic upgrade head` (Postgres via `DATABASE_URL`; needs a driver, e.g. `psycopg[binary]`).
 
 ---
@@ -229,7 +235,7 @@ unique constraints, FKs (with `ondelete`), and indexes across all nine tables. A
 | Conflict acknowledgment is structural, not semantic | Low | Stage 4 enforces that a conflict id is *referenced* (deterministic), not that the rationale genuinely engages it; a softer review/eval concern (ADR-012) |
 | Non-deterministic child ordering | Low | `feature_signals` / `conflict.parties` have no `ORDER BY`; response ordering varies — minor reproducibility concern |
 | Signal immutability is ORM-only | Low | Enforced by a `before_update` event, not a DB trigger (migration intentionally does not add one) |
-| Vector/RAG layer absent | Med | `chroma_id` reserved; no embeddings, no framework knowledge base yet |
+| Signal-level RAG not built | Low | Framework-knowledge RAG is shipped (Chroma adapter + retrieval service + `decision_framework_citation`); embedding raw signals for semantic retrieval is future. `signal.chroma_id` reserved |
 | Tests run on SQLite | Low | Postgres-specific enum/JSONB behavior not exercised in CI; parity test mitigates structural drift |
 | `JSON` not `JSONB` on Postgres | Low | Models use `sa.JSON`; switching to `JSONB` (for indexing/containment) is a future migration |
 
@@ -249,6 +255,14 @@ Ordered to reach the product thesis (a defensible, traceable decision) fastest.
 - ✅ **Decision Explainability (Phase 5)** — `GET /decisions/{id}/why`: the provenance walk back to
   raw signals, with a deterministic integrity check and `quoted_text` per claim. The product's
   signature feature; the Stage 4 edge tables made it a straightforward relational projection.
+- ✅ **Framework-grounded decisioning (RAG)** — Stage 4 retrieves framework passages (ChromaDB +
+  retrieval service) and the decision-integrity gate rejects any citation outside the retrieved pool;
+  citations persist as FK-protected `decision_framework_citation` edges (migrations 0006–0007).
+- ✅ **PipelineService** — a transaction-less saga orchestrating Stages 1–4 + `/why` end-to-end.
+- ✅ **Ingestion & validation** — manual / CSV / TXT / PDF / DOCX → validated `FeedbackEntry` batches.
+- ✅ **Recruiter-facing Streamlit showcase** — a deployed three-mode app (Showcase / Live Analysis /
+  Architecture); Live Analysis runs the real pipeline via a deterministic, input-derived
+  `LocalHeuristicClient` with no API key (illustrative, not Claude-quality).
 
 **P0 — finish the decision loop**
 1. **Scoring (RICE)** — deterministic compute in code; LLM only estimates inputs with confidence.
@@ -257,10 +271,9 @@ Ordered to reach the product thesis (a defensible, traceable decision) fastest.
    (largely deterministic), capped by open conflict severity.
 
 **P1 — credibility & enterprise polish**
-5. **Knowledge / RAG layer** — ChromaDB + curated framework corpus (RICE/JTBD/MoSCoW/strategy/PRD), citations on decisions.
-6. **Workspace entity + scoping** — first-class grouping so stages operate over a workspace.
-7. **Decision history / audit log** — append-only; Product-Ops "show your work".
-8. **Eval harness** — No-RAG vs Framework-RAG vs Signal-RAG metrics (faithfulness, grounding accuracy, decision quality) — product hardening + research-paper backbone.
+5. **Workspace entity + scoping** — first-class grouping so stages operate over a workspace.
+6. **Decision history / audit log** — append-only; Product-Ops "show your work".
+7. **Eval harness** — No-RAG vs Framework-RAG vs Signal-RAG metrics (faithfulness, grounding accuracy, decision quality) — product hardening + research-paper backbone.
 
 **P2 — nice to have**
 9. Human-in-the-loop override + reason capture; one-page decision brief export; hybrid retrieval; prompt/embedding caching.

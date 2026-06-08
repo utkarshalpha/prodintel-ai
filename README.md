@@ -10,22 +10,58 @@ exact stakeholder signals that produced it.
 
 **Author:** Utkarsh Tiwari  
 **Target roles:** AI Product Manager · Associate Product Manager · Product Strategy · Product Operations  
-**Contact:** [Email](mailto:utkarsh7854@gmail.com) · [LinkedIn](https://www.linkedin.com/in/utkaxh/) · [GitHub](https://github.com/utkarshalpha) <!-- replace # with your profile URLs -->  
-**Status:** Stages 1–4 implemented · Decision Explainability (`/why`) shipped · 276 tests passing (local, deterministic) · RICE scoring on the roadmap
+**Contact:** [Email](mailto:utkarsh7854@gmail.com) · [LinkedIn](https://www.linkedin.com/in/utkaxh/) · [GitHub](https://github.com/utkarshalpha)  
+**Repository:** [github.com/utkarshalpha/prodintel-ai](https://github.com/utkarshalpha/prodintel-ai)  
+**Status:** Stages 1–4 + Decision Explainability (`/why`) + framework-grounded decisioning (RAG) shipped · deployed Streamlit showcase (3 modes) · 569 tests (deterministic) · RICE *scoring engine* on the roadmap
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
-![Tests](https://img.shields.io/badge/tests-276%20passing%20(local)-brightgreen)
+![Tests](https://img.shields.io/badge/tests-569-brightgreen)
 ![Pydantic](https://img.shields.io/badge/pydantic-v2-e92063)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688)
 ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-d71f00)
 
 ---
 
+## 🚀 Live Demo
+
+**▶ [appintel-ai.streamlit.app](https://appintel-ai-d9uewikfgwfaktmlnzrfrh.streamlit.app/)** — deployed on Streamlit Community Cloud, no install or API key required.
+
+The app has **three modes** (sidebar selector):
+
+| Mode | What it shows |
+|---|---|
+| **Showcase** | A deterministic, narrated walkthrough of the full pipeline (signals → analysis → features → conflicts → decision → `/why` provenance) driven by a committed demo snapshot. The recruiter "happy path." |
+| **Live Analysis** | Runs the **real pipeline** on *your* feedback (manual entry or CSV/TXT/PDF/DOCX upload). It uses a deterministic, input-derived **`LocalHeuristicClient`** — **no API key**, offline, and explicitly labeled *illustrative, not Claude-quality*: it exists to exercise the real validation gates, provenance, and `/why` on arbitrary input. |
+| **Architecture** | The system's design rendered as Mermaid diagrams (with source). |
+
+> The deployed demo makes **no Claude calls and needs no secret** — the Anthropic SDK is present only because the live pipeline imports the API package; real Claude execution remains a backend capability, not part of the public demo.
+
+## ✨ Features
+
+- **4-stage decision pipeline** — Signal Analysis → Feature Extraction → Conflict Detection → Decision Synthesis, each guarded by a **deterministic validation gate** that rejects any model output it cannot prove.
+- **Decision Explainability** (`GET /decisions/{id}/why`) — walks the provenance graph from a decision back to the original stakeholder quotes, with a deterministic integrity check.
+- **Framework-grounded decisioning (RAG)** — Stage 4 retrieves framework passages (RICE/Kano) from ChromaDB; the decision-integrity gate **rejects any citation not in the retrieved pool**, and citations persist as FK-protected edges.
+- **Ingestion & validation** — manual entry + CSV/TXT/PDF/DOCX uploads → validated `FeedbackEntry` batches (size/row/length caps, partial-success reporting).
+- **End-to-end orchestration** — a transaction-less `PipelineService` saga runs all stages and returns a canonical, partial-progress-aware result.
+- **Deployed Streamlit showcase** — three modes, reusing the same renderers and snapshot assembler across the demo and the live path.
+
+## 📸 Screenshots
+
+> _Add PNGs to `docs/screenshots/` — they render below once present._
+
+| Showcase | Live Analysis | Architecture |
+|---|---|---|
+| ![Showcase mode](docs/screenshots/showcase.png) | ![Live Analysis mode](docs/screenshots/live-analysis.png) | ![Architecture mode](docs/screenshots/architecture.png) |
+
+---
+
 > **Status:** Stages 1–4 of the decision pipeline are implemented, production-wired, and
-> covered by **276 passing tests** — including **Decision Explainability** (`GET
-> /decisions/{id}/why`), which walks a decision's provenance graph back to the original
-> stakeholder signals. RICE scoring is on the roadmap (see [§15](#15-roadmap)) — it is
-> **not** built yet, and this README does not pretend otherwise.
+> covered by **569 tests** — including **Decision Explainability** (`GET /decisions/{id}/why`),
+> which walks a decision's provenance graph back to the original stakeholder signals, and
+> **framework-grounded decisioning** (RAG: Stage 4 cites retrieved RICE/Kano passages, validated
+> against the retrieved pool). A deterministic **RICE scoring engine** — rubric math that would
+> replace the model-provided `priority_rank` — is still on the roadmap (see [§15](#15-roadmap)),
+> and this README does not pretend otherwise.
 
 ---
 
@@ -62,8 +98,11 @@ engineering reviewers alike:
   integrity) that make unsupported or hallucinated output *impossible to persist*.
 - **Reproducibility & eval-readiness** — deterministic retries and a faked LLM boundary so the full
   pipeline runs offline in tests; the foundation for a future No-RAG vs. RAG evaluation study.
-- **Engineering discipline** — 276 deterministic tests, Alembic migrations with model-parity checks,
+- **Engineering discipline** — 569 deterministic tests, Alembic migrations with model-parity checks,
   structured JSON logging with correlation IDs, and hardened transaction boundaries.
+- **Shipped product surface** — a deployed Streamlit app (three modes) with a real, no-API-key Live
+  Analysis path over user uploads, an ingestion/validation layer, and a deterministic local engine —
+  not just a backend API.
 - **Documented decision-making** — 12 ADRs, each as *Problem → Decision → Trade-offs → Alternatives*
   (see [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)).
 
@@ -178,8 +217,9 @@ Prioritization → Decision Recommendation → Evidence Traceability.`
 signals, (b) the supporting evidence, (c) the frameworks applied, and (d) a confidence score.
 
 The first four stages of this loop are implemented today, through decision synthesis — the
-keystone. RICE prioritization (deterministic scoring) and the evidence-traceability endpoint
-are the next milestones.
+keystone — plus the **evidence-traceability endpoint** (`/why`) and **framework-grounded
+decisioning** (RAG). A deterministic **RICE scoring engine** (rubric math replacing the
+model-provided priority rank) is the next milestone.
 
 ## 4. Architecture diagram
 
@@ -203,7 +243,7 @@ and unit-tested.
                 │                                     │
    ┌────────────▼───────────┐            ┌────────────▼─────────────────────┐
    │  Postgres + Alembic    │            │  Runtime Harness                  │
-   │  9 tables, provenance  │            │  BaseStageRunner · RetryPolicy ·  │
+   │  12 tables, provenance │            │  BaseStageRunner · RetryPolicy ·  │
    │  edges, indexes        │            │  StageResult · metrics            │
    └────────────────────────┘            └───────┬───────────────┬──────────┘
                                                  │               │
@@ -314,7 +354,9 @@ See [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for the full rational
 | Validation / contracts | Pydantic v2 |
 | LLM | Anthropic Claude (via a `ToolCallClient` adapter) |
 | Database | PostgreSQL (production); SQLite for the dev/test default |
-| Vector store | ChromaDB *(reserved — RAG layer not yet built)* |
+| Vector store / RAG | ChromaDB (framework corpus) + an in-memory adapter for tests/demo |
+| Ingestion | stdlib CSV/TXT · `pypdf` (PDF) · `python-docx` (DOCX) |
+| UI / showcase | Streamlit (deployed on Streamlit Community Cloud) |
 | Testing | pytest |
 | Observability | stdlib `logging` with a JSON formatter + correlation IDs |
 
@@ -345,8 +387,9 @@ from app state and return `503` if not configured.
 
 ## 12. Database Schema
 
-Nine tables. UUID primary keys; enums stored as lowercase values; JSON columns for structured AI
-output; vectors designated for ChromaDB (`chroma_id` reserved, not yet populated).
+Twelve tables. UUID primary keys; enums stored as lowercase values; JSON columns for structured AI
+output. Framework knowledge is embedded into ChromaDB and cited by decisions; `signal.chroma_id`
+remains reserved for future signal-level RAG.
 
 | Table | Purpose | Key integrity |
 |---|---|---|
@@ -359,20 +402,25 @@ output; vectors designated for ChromaDB (`chroma_id` reserved, not yet populated
 | `decision` | Synthesized, evidence-backed decision over a subject | polymorphic `subject_id` (indexed); `recommendation` / `priority_rank` / `status` |
 | `decision_evidence` | Provenance edge decision↔signal | composite PK; FK→signal **`RESTRICT`**; reverse-lookup index |
 | `decision_conflict` | Edge decision↔acknowledged conflict | composite PK; FK→conflict **`RESTRICT`**; reverse-lookup index |
+| `knowledge_source` | A framework document in the RAG corpus (RICE, Kano, …) | `framework` / `title` / `corpus_version` |
+| `knowledge_chunk` | An embedded, vector-indexed passage of a source | FK→knowledge_source `CASCADE`; `chroma_id` |
+| `decision_framework_citation` | Edge decision↔cited framework chunk | composite PK; FK→knowledge_chunk **`RESTRICT`**; `retrieval_score` / `relationship_type` / `evidence_type` |
 
 Stage 4 makes a decision's evidence and its acknowledged conflicts **FK-protected edge tables**
 (deletion protection), not JSON — so neither a backing signal nor an acknowledged conflict can be
 deleted out from under a decision.
 
-Current Alembic head: **`0005_decision_and_edges`**. Migration↔model parity (columns, types,
-constraints, foreign keys, indexes) is enforced by a test.
+Current Alembic head: **`0007_create_decision_framework_citation`** (migrations 0001–0007).
+Migration↔model parity (columns, types, constraints, foreign keys, indexes) is enforced by a test
+across all twelve tables.
 
 `workspace_id` (all tables) and `chroma_id` (`signal`) are **reserved/nullable** for upcoming
-workspace-scoping and RAG work — present in the schema, not yet used.
+workspace-scoping and signal-level RAG — present in the schema, not yet used.
 
 ## 13. Testing
 
-**276 tests passing**, fully deterministic — no network, no API key. The LLM boundary is faked
+**569 tests** (565 passing + 4 environment-gated `chromadb` integration tests that skip unless
+`RUN_CHROMA_TESTS=1`), fully deterministic — no network, no API key. The LLM boundary is faked
 behind the `ToolCallClient` protocol, so the full pipeline (including retries and validation) runs
 in-process in seconds.
 
@@ -384,7 +432,9 @@ python -m pytest -v       # verbose
 Coverage spans contracts, each deterministic gate (grounding, provenance, conflict integrity,
 decision integrity — with adversarial cases), the runtime harness, the Claude adapter (retryable
 vs. fatal error mapping), services (Stage 1→2→3→4 end-to-end), the HTTP API, migrations
-(apply/rollback + parity), provenance integrity (deletion protection + reverse traversal), and
+(apply/rollback + parity), provenance integrity (deletion protection + reverse traversal),
+framework-grounded retrieval and citation persistence, the ingestion layer (CSV/TXT/PDF/DOCX +
+validation), the local heuristic engine, the snapshot assembler (byte-identical regression), and
 structured logging.
 
 ## 14. Documentation
@@ -408,13 +458,17 @@ shipped:** `GET /decisions/{id}/why` walks the provenance graph (decision → ev
 acknowledged-conflict edges → subject feature → conflicts → signals → claims/spans) back to the
 original stakeholder text, with a deterministic integrity check and `quoted_text` for every claim.
 
+**Also shipped since:** **Framework-grounded decisioning (RAG)** — ChromaDB + a framework corpus,
+Stage 4 citing retrieved passages with citations validated against the retrieved pool · the
+`PipelineService` orchestrator · the **ingestion & validation** layer (CSV/TXT/PDF/DOCX) · the
+deployed **Streamlit showcase** (three modes).
+
 **Next (P0 — finish the decision loop):**
-- **Scoring (RICE)** — deterministic math in code; the LLM only estimates inputs. Replaces the
-  model-provided `priority_rank` with a rubric.
+- **RICE scoring engine** — deterministic priority math in code that *replaces* the model-provided
+  `priority_rank` with a rubric (distinct from the already-shipped RICE/Kano *framework citations*).
 - **Confidence service** — computed Evidence Coverage / Reasoning Quality / Input Confidence.
 
-**P1:** Knowledge/RAG layer (ChromaDB + framework corpus with citations) · Workspace entity &
-scoping · Decision history / audit log · Eval harness (No-RAG vs RAG).
+**P1:** Workspace entity & scoping · Decision history / audit log · Eval harness (No-RAG vs RAG).
 
 **Out of scope:** auth, billing, notifications, real tool connectors, competitive intelligence.
 
@@ -426,8 +480,9 @@ shipped features.)*
 **Prerequisites:** Python 3.11+, and (for production mode) PostgreSQL.
 
 ```bash
-# 1) Install dependencies (declared in pyproject.toml)
-python -m pip install -e ".[dev]"
+# 1) Install dependencies (the project runs from the repo root — no build/install step)
+python -m pip install -r requirements.txt
+python -m pip install pytest httpx              # test-only deps
 
 # 2) Run the test suite — no API key or database required
 python -m pytest
@@ -451,6 +506,27 @@ uvicorn app.main:app
 The dev/test default uses SQLite, so the test suite and local experimentation need neither a
 database server nor an API key. A real `ANTHROPIC_API_KEY` is required only to serve live requests
 through the running API.
+
+**Run the Streamlit showcase (no API key, no database):**
+
+```bash
+python -m pip install -r requirements.txt
+streamlit run showcase/app.py
+```
+
+This launches the three-mode app (Showcase / Live Analysis / Architecture) locally. Live Analysis
+uses the deterministic `LocalHeuristicClient`, so it runs fully offline — no Anthropic key.
+
+**Deploy to Streamlit Community Cloud:**
+
+1. Push the repo to GitHub.
+2. On [share.streamlit.io](https://share.streamlit.io), create an app pointing at this repo, with
+   **Main file path = `showcase/app.py`**.
+3. Cloud installs from `requirements.txt` automatically. **No secrets are required** — the deployed
+   demo uses the local engine and makes no Claude calls.
+
+> Note on dependencies: `requirements.txt` (repo root) and `showcase/requirements.txt` (next to the
+> entrypoint) are kept identical; Streamlit Cloud resolves the one adjacent to the entrypoint.
 
 ---
 
