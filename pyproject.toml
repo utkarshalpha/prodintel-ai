@@ -19,6 +19,10 @@ vector = [
     "chromadb",
     "sentence-transformers",
 ]
+ingest = [
+    "pypdf>=4",
+    "python-docx>=1.1",
+]
 
 [tool.pytest.ini_options]
 # Run from the repo root so `import app...` resolves without installation.
