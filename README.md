@@ -47,11 +47,29 @@ The app has **three modes** (sidebar selector):
 
 ## 📸 Screenshots
 
-> _Add PNGs to `docs/screenshots/` — they render below once present._
+**Showcase walkthrough — hero & pipeline metrics**
 
-| Showcase | Live Analysis | Architecture |
-|---|---|---|
-| ![Showcase mode](docs/screenshots/showcase.png) | ![Live Analysis mode](docs/screenshots/live-analysis.png) | ![Architecture mode](docs/screenshots/architecture.png) |
+![ProdIntel AI Showcase: the hero, scenario, and the six-step pipeline with signal/feature/conflict/decision metrics](docs/screenshots/01-hero.png)
+
+_Conflicting stakeholder signals resolved into an evidence-traceable decision — every model output gated by deterministic validation._
+
+**Live Analysis — run the real pipeline on your own feedback**
+
+![Live Analysis mode: upload CSV/TXT/PDF/DOCX feedback and run the real pipeline locally with no API key](docs/screenshots/02-live-analysis.png)
+
+_Upload your own stakeholder feedback and run the real pipeline locally — no API key, via a deterministic local engine clearly labeled as illustrative._
+
+**Conflict Detection — opposing, evidence-backed positions**
+
+![Conflict Detection: opposing stakeholder positions side by side — Sales advocate versus Engineering risk-flag, each citing its evidence signals](docs/screenshots/03-conflict-detection.png)
+
+_Genuine stakeholder disagreement surfaced as opposing, evidence-backed positions; an empty result is a valid outcome._
+
+**Decision + Why — ranked recommendation with full provenance**
+
+![Decision and Why: a ranked, framework-cited recommendation traced back through its evidence to the original stakeholder quote](docs/screenshots/04-decision-why.png)
+
+_A ranked, evidence-backed recommendation that acknowledges every conflict over its subject and cites retrieved RICE/Kano passages — with full provenance walked back to the exact source quote via `/why`._
 
 ---
 
